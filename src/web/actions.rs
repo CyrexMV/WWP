@@ -331,6 +331,13 @@ impl App {
                     self.go(View::Dokument(id));
                 }
             }
+            "tipp-aus" => {
+                if !self.data.tipps_aus.iter().any(|t| t == v) {
+                    self.data.tipps_aus.push(v.to_string());
+                }
+                self.changed();
+                self.render();
+            }
             "dok-tab" => {
                 if let Some(art) = DokArt::from_key(v) {
                     self.ui.dok_filter.clear();

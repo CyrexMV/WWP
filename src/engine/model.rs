@@ -713,6 +713,8 @@ pub struct Dokument {
     pub storno_von: Option<Id>,
     /// Aus welchem Angebot die Rechnung entstand
     pub aus_angebot: Option<Id>,
+    /// Aus welchem Dokument dieses als Folgedokument entstand (Angebot → AB → Lieferschein → Rechnung)
+    pub vorgaenger: Option<Id>,
     /// Kleinunternehmer-Hinweis statt Umsatzsteuer
     pub kleinunternehmer: bool,
     pub versendet_am: String,
@@ -1096,6 +1098,8 @@ pub struct Data {
     pub nav_reihenfolge: Vec<String>,
     /// ausgeblendete Menüpunkte
     pub nav_aus: Vec<String>,
+    /// weggeklickte Hinweise (z. B. „So funktioniert der Ablauf“)
+    pub tipps_aus: Vec<String>,
     /// Nummernkreise: „RE-2026“ → zuletzt vergebene Nummer
     pub zaehler: BTreeMap<String, u32>,
     pub next_id: Id,
@@ -1313,6 +1317,7 @@ impl Data {
         d.empfaenger = a.empfaenger.clone();
         d.betreff = a.betreff.clone();
         d.aus_angebot = Some(angebot);
+        d.vorgaenger = Some(angebot);
         d.kleinunternehmer = a.kleinunternehmer;
         if let Some(an) = self.dokument_mut(angebot) {
             if an.status == DokStatus::Entwurf || an.status == DokStatus::Versendet {
@@ -1336,6 +1341,7 @@ impl Data {
         d.betreff = a.betreff.clone();
         d.kleinunternehmer = a.kleinunternehmer;
         d.aus_angebot = if a.art == DokArt::Angebot { Some(src) } else { a.aus_angebot };
+        d.vorgaenger = Some(src);
         if a.art == DokArt::Lieferschein && art == DokArt::Rechnung && !a.leistung.trim().is_empty() {
             d.leistung = a.leistung.clone();
         }
@@ -1397,6 +1403,51 @@ impl Data {
     }
 
     /// Kopie eines Dokuments (neue Nummer, Status Entwurf, heutiges Datum).
+    /// Alle Dokumente eines Vorgangs (Angebot → Auftragsbestätigung → Lieferschein → Rechnung),
+    /// je Schritt das maßgebliche: verbunden über Folgedokumente bzw. denselben Auftrag.
+    /// `start` gewinnt in seinem Schritt (z. B. das gerade geöffnete Dokument).
+    pub fn vorgang(&self, start: Option<Id>, auftrag: Option<Id>) -> [Option<Id>; 4] {
+        let mut ids: Vec<Id> = start.into_iter().collect();
+        let auftrag = auftrag.or_else(|| self.dokument(start).and_then(|d| d.auftrag_id));
+        if let Some(a) = auftrag {
+            ids.extend(self.dokumente.iter().filter(|d| d.auftrag_id == Some(a)).map(|d| d.id));
+        }
+        loop {
+            let n = ids.len();
+            for d in &self.dokumente {
+                let rein = ids.contains(&d.id);
+                let verbunden = [d.vorgaenger, d.aus_angebot].iter().flatten().any(|v| ids.contains(v));
+                if !rein && verbunden {
+                    ids.push(d.id);
+                }
+                if rein {
+                    for v in [d.vorgaenger, d.aus_angebot].into_iter().flatten() {
+                        if !ids.contains(&v) && self.dokument(Some(v)).is_some() {
+                            ids.push(v);
+                        }
+                    }
+                }
+            }
+            if ids.len() == n {
+                break;
+            }
+        }
+        let mut out = [None; 4];
+        for (i, art) in DokArt::ALLE.iter().enumerate() {
+            if let Some(s) = self.dokument(start).filter(|d| d.art == *art) {
+                out[i] = Some(s.id);
+                continue;
+            }
+            out[i] = self
+                .dokumente
+                .iter()
+                .filter(|d| d.art == *art && ids.contains(&d.id) && d.storno_von.is_none())
+                .max_by_key(|d| (!matches!(d.status, DokStatus::Storniert | DokStatus::Abgelehnt), d.datum.clone(), d.id))
+                .map(|d| d.id);
+        }
+        out
+    }
+
     pub fn duplizieren(&mut self, src: Id, heute: &str) -> Option<Id> {
         let s = self.dokument(Some(src))?.clone();
         let id = self.neues_dokument(s.art, s.kunde_id, s.auftrag_id, heute);
@@ -1946,6 +1997,14 @@ mod tests {
         d.unterschrift_entfernen(ls);
         assert_eq!(d.dokument(Some(ls)).unwrap().status, DokStatus::Versendet);
         assert_eq!(DokArt::from_key("ab"), Some(DokArt::Auftragsbestaetigung));
+        // Vorgang: alle vier Schritte gefunden – vom Auftrag und von jedem Dokument aus
+        assert_eq!(d.vorgang(None, Some(a)), [Some(an), Some(ab), Some(ls), Some(re)]);
+        assert_eq!(d.vorgang(Some(ls), None), [Some(an), Some(ab), Some(ls), Some(re)]);
+        // auch ohne Auftrag über die Folgedokumente verbunden
+        let an2 = d.neues_dokument(DokArt::Angebot, Some(k), None, "2026-11-20");
+        let re2 = d.folgedokument(an2, DokArt::Rechnung, "2026-11-21").unwrap();
+        assert_eq!(d.vorgang(Some(re2), None), [Some(an2), None, None, Some(re2)]);
+        assert_eq!(d.vorgang(Some(an2), None), [Some(an2), None, None, Some(re2)]);
     }
 
     #[test]

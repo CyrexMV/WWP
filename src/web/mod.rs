@@ -5,6 +5,7 @@
 //! * Eingaben in Felder mit `data-f` → [`App::field`] (`actions.rs`), live gespeichert
 //! * Suchfelder mit `data-search` → nur die Liste wird neu gezeichnet (Fokus bleibt erhalten)
 
+mod ablauf;
 mod actions;
 mod dnd;
 mod kalender;

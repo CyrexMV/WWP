@@ -18,6 +18,7 @@ der Stand wird im GitHub-Project-Board verfolgt.
 | – | ✅ Einstellungen neu gestaltet (Bereiche, Live-Vorschau, Einrichtungsstand) | Design |
 | – | ✅ Eigene Menüpunkte für Auftragsbestätigungen, Lieferscheine, Mahnwesen und Leistungskatalog | Design |
 | – | ✅ Seitenleiste anpassbar: Reihenfolge per Ziehen/Pfeilen, Menüpunkte ein- und ausblenden | Design |
+| – | ✅ Ablauf vereinfacht: Schrittleiste Angebot → Bestätigung → Lieferschein → Rechnung, aufgeräumte Aktionen | Design |
 
 ## Priorität hoch
 

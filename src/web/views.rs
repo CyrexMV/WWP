@@ -617,14 +617,11 @@ impl App {
             .next()
             .map(|n| btn("auftrag-next", "arrow", &format!("Weiter: {}", n.label()), "primary block", Some(a.id), ""))
             .unwrap_or_default();
+        h += &self.ablauf_html(None, Some(a.id));
         let _ = write!(
             h,
-            "<div class=\"card actions\">{}{}{}{}{}{}{}</div>",
+            "<div class=\"card actions\">{}{}{}</div>",
             next,
-            btn("auftrag-dok", "file", "Angebot", "ghost block", Some(a.id), "angebot"),
-            btn("auftrag-dok", "check", "Auftragsbestätigung", "ghost block", Some(a.id), "ab"),
-            btn("auftrag-dok", "pen", "Lieferschein", "ghost block", Some(a.id), "lieferschein"),
-            btn("auftrag-dok", "receipt", "Rechnung", "ghost block", Some(a.id), "rechnung"),
             if a.status != AuftragStatus::Abgelehnt { btn("auftrag-reject", "x", "Als abgelehnt markieren", "ghost block", Some(a.id), "") } else { String::new() },
             btn("auftrag-del", "trash", "Löschen", "ghost block danger-text", Some(a.id), "")
         );
@@ -737,6 +734,7 @@ impl App {
         let mut h = String::new();
         let n = self.data.dokumente.iter().filter(|x| x.art == art).count();
         h += &head(art.plural(), &format!("{n} insgesamt"), &btn("dok-neu", "plus", art.neu_label(), "primary", None, art.key()), false);
+        h += &self.ablauf_tipp_html();
         if n == 0 {
             h += &empty(
                 if art == DokArt::Rechnung { "receipt" } else { "file" },
@@ -1021,17 +1019,28 @@ impl App {
         h += "<p class=\"hint wide\">Platzhalter: {betrag} {faellig} {gueltig} {nummer} {datum} {zahlungsziel} {kunde}</p>";
         h += "</div></div>";
         h += "</div><aside class=\"ed-side\">";
+        // Ablauf (nicht bei Stornos und einzelnen Rechnungen ohne Vorgeschichte)
+        let vorgang = d.vorgang(Some(id), None);
+        if x.storno_von.is_none() && (x.art != DokArt::Rechnung || vorgang.iter().flatten().count() > 1) {
+            h += &self.ablauf_html(Some(id), x.auftrag_id);
+        }
         // Summen + Aktionen
         let _ = write!(h, "<div class=\"card sticky\"><div id=\"doc-sum\">{}</div>", self.doc_sum_html(x));
         h += "<div class=\"actions\">";
-        h += &btn("dok-pdf", "eye", "PDF ansehen", "ghost block", Some(id), "");
         h += &btn("dok-send", "send", if x.status == DokStatus::Entwurf { "Per E-Mail senden" } else { "Erneut senden" }, "primary block", Some(id), "");
-        h += &btn("dok-save", "download", "PDF speichern", "ghost block", Some(id), "");
+        let _ = write!(
+            h,
+            "<div class=\"btn-pair\">{}{}</div>",
+            btn("dok-pdf", "eye", "Ansehen", "ghost", Some(id), ""),
+            btn("dok-save", "download", "Speichern", "ghost", Some(id), "")
+        );
+        // seltener gebraucht → „Weitere Aktionen“
+        let mut mehr = String::new();
+        if x.status == DokStatus::Entwurf {
+            mehr += &btn("dok-mark-sent", "check", "Als versendet markieren", "ghost block", Some(id), "");
+        }
         match x.art {
             DokArt::Rechnung => {
-                if x.status == DokStatus::Entwurf {
-                    h += &btn("dok-mark-sent", "check", "Als versendet markieren", "ghost block", Some(id), "");
-                }
                 if x.status == DokStatus::Versendet && x.storno_von.is_none() {
                     h += &btn("dok-paid", "check", "Zahlung erfassen", "success block", Some(id), "");
                     if x.ueberfaellig(&heute) || !x.mahnungen.is_empty() {
@@ -1041,42 +1050,34 @@ impl App {
                 }
                 if x.status == DokStatus::Bezahlt {
                     h += &format!("<p class=\"paid\">{} Bezahlt am {}</p>", ic("check"), german(&x.bezahlt_am));
-                    h += &btn("dok-unpaid", "undo", "Zahlungen zurücknehmen", "ghost block", Some(id), "");
+                    mehr += &btn("dok-unpaid", "undo", "Zahlungen zurücknehmen", "ghost block", Some(id), "");
                 }
                 if matches!(x.status, DokStatus::Versendet | DokStatus::Bezahlt) && x.storno_von.is_none() {
-                    h += &btn("dok-storno", "x", "Stornieren", "ghost block", Some(id), "");
+                    mehr += &btn("dok-storno", "x", "Stornieren", "ghost block", Some(id), "");
                 }
             }
             DokArt::Angebot => {
-                if x.status == DokStatus::Entwurf {
-                    h += &btn("dok-mark-sent", "check", "Als versendet markieren", "ghost block", Some(id), "");
-                }
-                if x.unterschrift.is_none() && x.status != DokStatus::Abgelehnt {
+                if x.unterschrift.is_none() && !matches!(x.status, DokStatus::Abgelehnt | DokStatus::Angenommen) {
                     h += &btn("sig-open", "pen", "Vor Ort unterschreiben lassen", "success block", Some(id), "");
                 }
-                h += &btn("dok-folge", "check", "Auftragsbestätigung", "ghost block", Some(id), "ab");
-                h += &btn("dok-folge", "file", "Lieferschein", "ghost block", Some(id), "lieferschein");
-                h += &btn("dok-to-invoice", "receipt", "In Rechnung umwandeln", "ghost block", Some(id), "");
                 if x.status == DokStatus::Versendet {
-                    h += &btn("dok-status", "check", "Angenommen", "ghost block", Some(id), "angenommen");
-                    h += &btn("dok-status", "x", "Abgelehnt", "ghost block", Some(id), "abgelehnt");
+                    let _ = write!(
+                        h,
+                        "<p class=\"ask-label\">Hat der Kunde zugesagt?</p><div class=\"btn-pair\">{}{}</div>",
+                        btn("dok-status", "check", "Ja, angenommen", "ghost", Some(id), "angenommen"),
+                        btn("dok-status", "x", "Abgelehnt", "ghost", Some(id), "abgelehnt")
+                    );
                 }
             }
             DokArt::Auftragsbestaetigung | DokArt::Lieferschein => {
-                if x.status == DokStatus::Entwurf {
-                    h += &btn("dok-mark-sent", "check", "Als versendet markieren", "ghost block", Some(id), "");
-                }
                 if x.unterschrift.is_none() {
                     h += &btn("sig-open", "pen", "Unterschreiben lassen", "success block", Some(id), "");
                 }
-                if x.art == DokArt::Auftragsbestaetigung {
-                    h += &btn("dok-folge", "file", "Lieferschein", "ghost block", Some(id), "lieferschein");
-                }
-                h += &btn("dok-folge", "receipt", "Rechnung erstellen", "ghost block", Some(id), "rechnung");
             }
         }
-        h += &btn("dok-dup", "copy", "Duplizieren", "ghost block", Some(id), "");
-        h += &btn("dok-del", "trash", "Löschen", "ghost block danger-text", Some(id), "");
+        mehr += &btn("dok-dup", "copy", "Duplizieren", "ghost block", Some(id), "");
+        mehr += &btn("dok-del", "trash", "Löschen", "ghost block danger-text", Some(id), "");
+        let _ = write!(h, "<details class=\"more\"><summary>{}Weitere Aktionen</summary><div class=\"actions\">{mehr}</div></details>", ic("chevron"));
         h += "</div>";
         let _ = write!(
             h,

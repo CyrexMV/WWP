@@ -30,7 +30,9 @@ Kunden, Aufträge, Angebote, Rechnungen und Finanzen an einem Ort – **komplett
 - **Per E-Mail senden**: PDF wird angehängt, Empfänger, Betreff und Text sind vorausgefüllt (Gmail, Outlook,
   Samsung E-Mail …) – oder an WhatsApp/Drive teilen; PDF ansehen oder in *Download/WWP* speichern
 - Fortlaufende Nummern je Jahr (AN-2026-0001, RE-2026-0001), Präfixe einstellbar
-- Angebot → Rechnung mit einem Tipp, Duplizieren
+- **Ablauf auf einen Blick**: Angebot → Auftragsbestätigung (optional) → Lieferschein (optional) → Rechnung.
+  Im Dokument und im Auftrag zeigt eine Schrittleiste, was schon da ist, was übersprungen wurde und was als
+  Nächstes kommt; „Erstellen“ übernimmt Kunde, Anschrift und Positionen. Duplizieren unter „Weitere Aktionen“
 - **Auftragsbestätigung** und **Lieferschein/Arbeitsnachweis** (ohne Preise) als eigene Dokumente mit Nummernkreis,
   erstellt aus Angebot oder Auftrag; aus dem Lieferschein wird mit einem Tipp die Rechnung
 - **Unterschrift per S-Pen**: Der Kunde unterschreibt direkt auf dem Tablet (Druckstufen, Handballen wird
