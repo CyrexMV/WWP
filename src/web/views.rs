@@ -888,7 +888,7 @@ impl App {
                     h += &btn("dok-paid", "check", "Zahlung erfassen", "success block", Some(id), "");
                     if x.ueberfaellig(&heute) || !x.mahnungen.is_empty() {
                         let label = format!("{} erstellen", MAHNSTUFEN[x.naechste_stufe() as usize]);
-                        h += &btn("mahn-new", "bell", &label, if x.zu_mahnen(&heute) { "primary block" } else { "ghost block" }, Some(id), "");
+                        h += &btn("mahn-new", "bell", &label, if x.zu_mahnen(&heute) { "warn block" } else { "ghost block" }, Some(id), "");
                     }
                 }
                 if x.status == DokStatus::Bezahlt {

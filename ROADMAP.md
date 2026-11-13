@@ -3,14 +3,21 @@
 Geplante Erweiterungen. Jede Funktion hat ein eigenes Issue mit Beschreibung und Umfang;
 der Stand wird im GitHub-Project-Board verfolgt.
 
+## Erledigt
+
+| # | Funktion | Bereich |
+|---|----------|---------|
+| [#3](https://github.com/CyrexMV/WWP/issues/3) | ✅ GiroCode (QR-Code zum Bezahlen) auf Rechnungen | Rechnungen |
+| [#4](https://github.com/CyrexMV/WWP/issues/4) | ✅ Mahnwesen mit Mahnstufen und Teilzahlungen | Rechnungen |
+| [#28](https://github.com/CyrexMV/WWP/issues/28) | ✅ Buttons modernisieren | Design |
+| – | ✅ Einstellungen neu gestaltet (Bereiche, Live-Vorschau, Einrichtungsstand) | Design |
+
 ## Priorität hoch
 
 | # | Funktion | Bereich |
 |---|----------|---------|
 | [#1](https://github.com/CyrexMV/WWP/issues/1) | Praxistest auf dem Galaxy Tab S12 Ultra (Android-Funktionen) | Technik |
 | [#2](https://github.com/CyrexMV/WWP/issues/2) | E-Rechnung: ZUGFeRD / XRechnung erzeugen | Rechnungen |
-| [#3](https://github.com/CyrexMV/WWP/issues/3) | GiroCode (QR-Code zum Bezahlen) auf Rechnungen | Rechnungen |
-| [#4](https://github.com/CyrexMV/WWP/issues/4) | Mahnwesen mit Mahnstufen | Rechnungen |
 | [#5](https://github.com/CyrexMV/WWP/issues/5) | Backup-Erinnerung und automatisches Backup | Technik |
 | [#6](https://github.com/CyrexMV/WWP/issues/6) | App-Sperre mit PIN und Fingerabdruck | Technik |
 | [#7](https://github.com/CyrexMV/WWP/issues/7) | Zeiterfassung pro Auftrag → direkt in die Rechnung | Aufträge |
@@ -48,7 +55,7 @@ der Stand wird im GitHub-Project-Board verfolgt.
 ## Vorgeschlagene Reihenfolge
 
 1. **Absichern:** #1 Praxistest, #5 Backup, #6 App-Sperre
-2. **Schneller bezahlt werden:** #3 GiroCode, #4 Mahnwesen
+2. ~~**Schneller bezahlt werden:** #3 GiroCode, #4 Mahnwesen~~ ✅
 3. **Rechtssicher bleiben:** #2 E-Rechnung (vor der B2B-Pflicht)
 4. **Arbeit vor Ort:** #7 Zeiterfassung, #11 Unterschrift, #13 Fotos, #14 Termine
 5. **Weniger Tipparbeit in den Finanzen:** #17 Bankimport, #18 wiederkehrende Ausgaben, #21 Belegerkennung
