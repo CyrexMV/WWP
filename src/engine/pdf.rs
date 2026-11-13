@@ -8,7 +8,7 @@
 use super::date;
 use super::image;
 use super::girocode;
-use super::model::{briefanrede, Data, DokArt, Dokument, Firma, Kunde};
+use super::model::{briefanrede, Data, DokArt, Dokument, Firma, Kunde, UNTERSCHRIFT_VERHAELTNIS};
 use super::money::{fmt_eur, fmt_num, fmt_qty, Cents};
 use super::report::Auswertung;
 use miniz_oxide::deflate::compress_to_vec_zlib;
@@ -435,15 +435,18 @@ struct Cols {
     menge_r: f32,
     einheit_x: f32,
     ust_r: Option<f32>,
-    preis_r: f32,
-    gesamt_r: f32,
+    /// Einzelpreis/Gesamt (rechte Kante); `None` beim Lieferschein
+    preise: Option<(f32, f32)>,
 }
 
-fn columns(mixed: bool) -> Cols {
+fn columns(mixed: bool, preise: bool) -> Cols {
+    if !preise {
+        return Cols { desc_x: 35.0, desc_w: 118.0, menge_r: 168.0, einheit_x: 171.0, ust_r: None, preise: None };
+    }
     if mixed {
-        Cols { desc_x: 35.0, desc_w: 68.0, menge_r: 118.0, einheit_x: 120.0, ust_r: Some(143.0), preis_r: 166.0, gesamt_r: RIGHT }
+        Cols { desc_x: 35.0, desc_w: 68.0, menge_r: 118.0, einheit_x: 120.0, ust_r: Some(143.0), preise: Some((166.0, RIGHT)) }
     } else {
-        Cols { desc_x: 35.0, desc_w: 78.0, menge_r: 128.0, einheit_x: 130.0, ust_r: None, preis_r: 166.0, gesamt_r: RIGHT }
+        Cols { desc_x: 35.0, desc_w: 78.0, menge_r: 128.0, einheit_x: 130.0, ust_r: None, preise: Some((166.0, RIGHT)) }
     }
 }
 
@@ -458,8 +461,10 @@ fn table_header(c: &mut Canvas, y: f32, cols: &Cols, accent: [f32; 3]) -> f32 {
     if let Some(u) = cols.ust_r {
         c.text_right(u, ty, s, true, BLACK, "USt.");
     }
-    c.text_right(cols.preis_r, ty, s, true, BLACK, "Einzelpreis");
-    c.text_right(cols.gesamt_r - 1.5, ty, s, true, BLACK, "Gesamt");
+    if let Some((preis_r, gesamt_r)) = cols.preise {
+        c.text_right(preis_r, ty, s, true, BLACK, "Einzelpreis");
+        c.text_right(gesamt_r - 1.5, ty, s, true, BLACK, "Gesamt");
+    }
     y + 7.0
 }
 
@@ -613,7 +618,8 @@ fn dokument_seiten(data: &Data, doc: &Dokument, logo: Option<&[u8]>) -> Vec<Canv
         r.dedup();
         r.len() > 1
     };
-    let cols = columns(mixed);
+    let preise = doc.art.mit_preisen();
+    let cols = columns(mixed && preise, preise);
 
     let mut pages: Vec<Canvas> = Vec::new();
     let mut c = Canvas::default();
@@ -623,6 +629,8 @@ fn dokument_seiten(data: &Data, doc: &Dokument, logo: Option<&[u8]>) -> Vec<Canv
     let nr_label = match doc.art {
         DokArt::Angebot => "Angebotsnr.",
         DokArt::Rechnung => "Rechnungsnr.",
+        DokArt::Auftragsbestaetigung => "Bestätigungsnr.",
+        DokArt::Lieferschein => "Lieferschein-Nr.",
     };
     info.push((nr_label.into(), doc.nummer.clone()));
     info.push(("Datum".into(), date::german(&doc.datum)));
@@ -635,7 +643,7 @@ fn dokument_seiten(data: &Data, doc: &Dokument, logo: Option<&[u8]>) -> Vec<Canv
         }
     }
     if !doc.leistung.trim().is_empty() {
-        let l = if doc.art == DokArt::Rechnung { "Leistungsdatum" } else { "Ausführung" };
+        let l = if matches!(doc.art, DokArt::Rechnung | DokArt::Lieferschein) { "Leistungsdatum" } else { "Ausführung" };
         info.push((l.into(), doc.leistung.trim().to_string()));
     }
     if !doc.faellig.is_empty() {
@@ -647,6 +655,11 @@ fn dokument_seiten(data: &Data, doc: &Dokument, logo: Option<&[u8]>) -> Vec<Canv
     }
     if let Some(orig) = data.dokument(doc.storno_von) {
         info.push(("Storno zu".into(), orig.nummer.clone()));
+    }
+    if doc.art != DokArt::Angebot {
+        if let Some(an) = data.dokument(doc.aus_angebot) {
+            info.push(("Zu Angebot".into(), an.nummer.clone()));
+        }
     }
     let mut y = briefkopf(&mut c, f, logo, &doc.empfaenger, &info);
 
@@ -700,8 +713,10 @@ fn dokument_seiten(data: &Data, doc: &Dokument, logo: Option<&[u8]>) -> Vec<Canv
         if let Some(u) = cols.ust_r {
             c.text_right(u, ty, size, false, BLACK, &format!("{} %", p.ust));
         }
-        c.text_right(cols.preis_r, ty, size, false, BLACK, &fmt_num(p.preis));
-        c.text_right(cols.gesamt_r - 1.5, ty, size, false, BLACK, &fmt_num(p.netto()));
+        if let Some((preis_r, gesamt_r)) = cols.preise {
+            c.text_right(preis_r, ty, size, false, BLACK, &fmt_num(p.preis));
+            c.text_right(gesamt_r - 1.5, ty, size, false, BLACK, &fmt_num(p.netto()));
+        }
         let mut ly = ty;
         for (l, bold) in &lines {
             if ly > BOTTOM + 2.0 {
@@ -717,42 +732,52 @@ fn dokument_seiten(data: &Data, doc: &Dokument, logo: Option<&[u8]>) -> Vec<Canv
     }
 
     // --- Summen (+ GiroCode links daneben) -----------------------------------
-    let qr = if doc.art == DokArt::Rechnung && doc.storno_von.is_none() {
-        giro_payload(f, sum.brutto, &format!("Rechnung {}", doc.nummer))
-    } else {
-        None
-    };
-    let rows = 2 + sum.steuern.len();
-    let block_h = (rows as f32 * 6.0 + 10.0).max(if qr.is_some() { QR_SIZE + 12.0 } else { 0.0 });
-    if y + block_h > BOTTOM {
-        y = new_page(&mut pages, &mut c);
-    }
-    y += 6.0;
-    let qr_bottom = qr.as_deref().and_then(|p| girocode_block(&mut c, LEFT, y - 3.5, p));
-    let lx = 118.0;
-    if !sum.steuern.is_empty() {
-        summe_zeile(&mut c, lx, y, "Summe netto", &fmt_eur(sum.netto));
-        y += 5.2;
-        for (rate, basis, tax) in &sum.steuern {
-            let label = if sum.steuern.len() > 1 {
-                format!("zzgl. {} % USt. auf {}", rate, fmt_num(*basis))
-            } else {
-                format!("zzgl. {} % USt.", rate)
-            };
-            summe_zeile(&mut c, lx, y, &label, &fmt_eur(*tax));
+    if preise {
+        let qr = if doc.art == DokArt::Rechnung && doc.storno_von.is_none() {
+            giro_payload(f, sum.brutto, &format!("Rechnung {}", doc.nummer))
+        } else {
+            None
+        };
+        let rows = 2 + sum.steuern.len();
+        let block_h = (rows as f32 * 6.0 + 10.0).max(if qr.is_some() { QR_SIZE + 12.0 } else { 0.0 });
+        if y + block_h > BOTTOM {
+            y = new_page(&mut pages, &mut c);
+        }
+        y += 6.0;
+        let qr_bottom = qr.as_deref().and_then(|p| girocode_block(&mut c, LEFT, y - 3.5, p));
+        let lx = 118.0;
+        if !sum.steuern.is_empty() {
+            summe_zeile(&mut c, lx, y, "Summe netto", &fmt_eur(sum.netto));
             y += 5.2;
+            for (rate, basis, tax) in &sum.steuern {
+                let label = if sum.steuern.len() > 1 {
+                    format!("zzgl. {} % USt. auf {}", rate, fmt_num(*basis))
+                } else {
+                    format!("zzgl. {} % USt.", rate)
+                };
+                summe_zeile(&mut c, lx, y, &label, &fmt_eur(*tax));
+                y += 5.2;
+            }
+        }
+        y += 0.6;
+        let total_label = match doc.art {
+            DokArt::Angebot => "Angebotssumme",
+            DokArt::Auftragsbestaetigung => "Auftragssumme",
+            _ => "Gesamtbetrag",
+        };
+        summe_total(&mut c, lx, y, total_label, &fmt_eur(sum.brutto), accent);
+        y += 10.0;
+        if doc.kleinunternehmer {
+            c.text(lx - 2.0, y, 8.0, false, GRAY, "Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.");
+            y += 6.0;
+        }
+        if let Some(b) = qr_bottom {
+            y = y.max(b + 5.0);
         }
     }
-    y += 0.6;
-    let total_label = if doc.art == DokArt::Angebot { "Angebotssumme" } else { "Gesamtbetrag" };
-    summe_total(&mut c, lx, y, total_label, &fmt_eur(sum.brutto), accent);
-    y += 10.0;
-    if doc.kleinunternehmer {
-        c.text(lx - 2.0, y, 8.0, false, GRAY, "Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.");
-        y += 6.0;
-    }
-    if let Some(b) = qr_bottom {
-        y = y.max(b + 5.0);
+
+    if !preise {
+        y += 8.0;
     }
 
     // --- Schlusstext, Gruß ---------------------------------------------------
@@ -762,6 +787,9 @@ fn dokument_seiten(data: &Data, doc: &Dokument, logo: Option<&[u8]>) -> Vec<Canv
         y = absatz(&mut pages, &mut c, y, &schluss);
         y += 4.9;
     }
+    if doc.art == DokArt::Lieferschein || doc.art == DokArt::Auftragsbestaetigung || doc.unterschrift.is_some() {
+        y = unterschrift_block(&mut pages, &mut c, y, doc);
+    }
     gruss(&mut pages, &mut c, y, f);
     pages.push(c);
 
@@ -770,6 +798,69 @@ fn dokument_seiten(data: &Data, doc: &Dokument, logo: Option<&[u8]>) -> Vec<Canv
         footer(p, f, i + 1, total);
     }
     pages
+}
+
+/// Breite des Unterschriftenfelds im PDF (mm).
+const SIG_W: f32 = 70.0;
+
+/// Unterschriftsfeld: vorhandene Unterschrift als Vektor-Tinte, sonst leere Linien zum Unterschreiben.
+fn unterschrift_block(pages: &mut Vec<Canvas>, c: &mut Canvas, mut y: f32, doc: &Dokument) -> f32 {
+    let sig_h = SIG_W / UNTERSCHRIFT_VERHAELTNIS;
+    if y + sig_h + 16.0 > BOTTOM {
+        y = new_page(pages, c);
+    }
+    let titel = match doc.art {
+        DokArt::Angebot => "Angebot angenommen – Auftrag erteilt",
+        DokArt::Auftragsbestaetigung => "Auftrag bestätigt",
+        DokArt::Lieferschein => "Leistung erhalten und abgenommen",
+        DokArt::Rechnung => "",
+    };
+    c.text(LEFT, y, 9.0, true, BLACK, titel);
+    let top = y + 1.5;
+    let base = top + sig_h;
+    match &doc.unterschrift {
+        Some(u) => {
+            let _ = writeln!(c.c, "q 1 J 1 j {} RG", rgb([0.08, 0.12, 0.35]));
+            for strich in &u.striche {
+                if strich.len() == 1 {
+                    let p = strich[0];
+                    let (x, yy) = (LEFT + p[0] * SIG_W, top + p[1] * SIG_W);
+                    let _ = writeln!(c.c, "{} w {} {} m {} {} l S", n(0.9 * MM), n(x * MM), n((PAGE_H - yy) * MM), n((x + 0.05) * MM), n((PAGE_H - yy) * MM));
+                }
+                for w in strich.windows(2) {
+                    let (a, b) = (w[0], w[1]);
+                    let druck = ((a[2] + b[2]) * 0.5).clamp(0.05, 1.0);
+                    let breite = (0.25 + 0.6 * druck) * MM;
+                    let _ = writeln!(
+                        c.c,
+                        "{} w {} {} m {} {} l S",
+                        n(breite),
+                        n((LEFT + a[0] * SIG_W) * MM),
+                        n((PAGE_H - (top + a[1] * SIG_W)) * MM),
+                        n((LEFT + b[0] * SIG_W) * MM),
+                        n((PAGE_H - (top + b[1] * SIG_W)) * MM)
+                    );
+                }
+            }
+            c.c.push_str("Q\n");
+            c.line(LEFT, base + 1.0, LEFT + SIG_W, base + 1.0, 0.4, GRAY);
+            let unter = [u.ort.trim().to_string(), date::german(&u.datum), u.name.trim().to_string()]
+                .into_iter()
+                .filter(|s| !s.is_empty())
+                .collect::<Vec<_>>()
+                .join(", ");
+            c.text(LEFT, base + 4.8, 8.0, false, GRAY, &unter);
+        }
+        None => {
+            let lb = top + sig_h * 0.75;
+            c.line(LEFT, lb, LEFT + 50.0, lb, 0.4, GRAY);
+            c.line(LEFT + 60.0, lb, RIGHT, lb, 0.4, GRAY);
+            c.text(LEFT, lb + 3.8, 8.0, false, GRAY, "Ort, Datum");
+            c.text(LEFT + 60.0, lb + 3.8, 8.0, false, GRAY, "Unterschrift Auftraggeber (Name in Druckbuchstaben)");
+            return lb + 12.0;
+        }
+    }
+    base + 13.0
 }
 
 /// Angebot oder Rechnung als PDF.
@@ -1114,6 +1205,25 @@ mod tests {
         let count: usize = s.split("/Count ").nth(1).unwrap().split(' ').next().unwrap().parse().unwrap();
         assert!(count >= 4, "Seiten: {count}");
         assert!(mahnung_pdf(&d, &doc, 5, None).is_none());
+    }
+
+    #[test]
+    fn delivery_note_without_prices_and_signature() {
+        let (mut d, r) = sample();
+        let ls = d.folgedokument(r, DokArt::Lieferschein, "2026-11-12").unwrap();
+        let ohne = dokument_pdf(&d, d.dokument(Some(ls)).unwrap(), None);
+        assert!(ohne.starts_with(b"%PDF"));
+        let u = Unterschrift {
+            striche: vec![(0..40).map(|i| [i as f32 / 40.0, 0.1 + (i as f32 * 0.3).sin() * 0.05, 0.5]).collect()],
+            name: "Anna Schön".into(),
+            ort: "München".into(),
+            datum: "2026-11-12".into(),
+        };
+        assert!(d.unterschreiben(ls, u, "2026-11-12"));
+        let mit = dokument_pdf(&d, d.dokument(Some(ls)).unwrap(), None);
+        assert!(mit.len() > ohne.len());
+        let ab = d.folgedokument(r, DokArt::Auftragsbestaetigung, "2026-11-12").unwrap();
+        assert!(dokument_pdf(&d, d.dokument(Some(ab)).unwrap(), None).starts_with(b"%PDF"));
     }
 
     #[test]

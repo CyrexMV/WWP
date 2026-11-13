@@ -7,6 +7,7 @@
 
 mod actions;
 mod settings;
+mod signature;
 mod storage;
 mod views;
 
@@ -80,6 +81,8 @@ pub struct App {
     pub beleg_ziel: Option<Id>,
     save_gen: u32,
     pub loaded: bool,
+    /// offenes Unterschriftenfeld
+    pub pad: Option<signature::Pad>,
 }
 
 impl App {
@@ -95,6 +98,7 @@ impl App {
             beleg_ziel: None,
             save_gen: 0,
             loaded: false,
+            pad: None,
         }
     }
 
@@ -191,6 +195,10 @@ impl App {
 
     pub fn close_modal(&mut self) {
         self.confirm = None;
+        self.pad = None;
+        if let Some(m) = el("modal-card") {
+            let _ = m.class_list().remove_1("wide");
+        }
         if let Some(m) = el("modal") {
             let _ = m.class_list().add_1("hidden");
         }
@@ -471,6 +479,7 @@ pub fn start() {
     back.forget();
 
     storage::bind_files();
+    signature::bind();
     storage::init_storage();
     storage::register_service_worker();
     with_app(|a| a.render());

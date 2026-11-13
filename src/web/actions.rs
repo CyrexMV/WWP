@@ -62,6 +62,9 @@ impl App {
                 let (subject, body) = match x.art {
                     DokArt::Angebot => (x.fill(&f.mail_betreff_angebot, &f, k.as_ref()), x.fill(&f.mail_text_angebot, &f, k.as_ref())),
                     DokArt::Rechnung => (x.fill(&f.mail_betreff_rechnung, &f, k.as_ref()), x.fill(&f.mail_text_rechnung, &f, k.as_ref())),
+                    DokArt::Auftragsbestaetigung | DokArt::Lieferschein => {
+                        (x.fill(&f.mail_betreff_dok, &f, k.as_ref()), x.fill(&f.mail_text_dok, &f, k.as_ref()))
+                    }
                 };
                 share_file(&bytes, "application/pdf", &name, &to, &subject, &body);
                 if x.status == DokStatus::Entwurf {
@@ -108,6 +111,9 @@ impl App {
             let st = self.data.auftrag(Some(aid)).map(|a| a.status);
             match (art, st) {
                 (DokArt::Angebot, Some(AuftragStatus::Anfrage)) => self.data.auftrag_status(aid, AuftragStatus::Angebot, &heute),
+                (DokArt::Auftragsbestaetigung, Some(s)) if s <= AuftragStatus::Angebot => {
+                    self.data.auftrag_status(aid, AuftragStatus::Beauftragt, &heute)
+                }
                 (DokArt::Rechnung, Some(s)) if s != AuftragStatus::Abgerechnet && s != AuftragStatus::Abgelehnt => {
                     self.data.auftrag_status(aid, AuftragStatus::Erledigt, &heute)
                 }
@@ -324,6 +330,36 @@ impl App {
                 if let Some(id) = id {
                     self.go(View::Dokument(id));
                 }
+            }
+            "dok-tab" => {
+                if let Some(art) = DokArt::from_key(v) {
+                    self.ui.dok_filter.clear();
+                    self.ui.dok_q.clear();
+                    self.go_root(View::Dokumente(art));
+                }
+            }
+            "dok-folge" => {
+                let (Some(id), Some(art)) = (id, DokArt::from_key(v)) else { return };
+                if let Some(n) = self.data.folgedokument(id, art, &heute) {
+                    self.changed();
+                    self.go(View::Dokument(n));
+                    self.toast(&format!("{} erstellt", art.label()));
+                }
+            }
+            "sig-open" => {
+                if let Some(id) = id {
+                    self.sig_open(id);
+                }
+            }
+            "sig-clear" => self.sig_clear(),
+            "sig-ok" => self.sig_ok(),
+            "sig-del" => {
+                let Some(id) = id else { return };
+                self.ask("Unterschrift entfernen?", "Die Unterschrift wird gelöscht und das Dokument wieder als versendet geführt.", "Entfernen", true, move |a| {
+                    a.data.unterschrift_entfernen(id);
+                    a.changed();
+                    a.render();
+                });
             }
             "dok-filter" => {
                 self.ui.dok_filter = v.to_string();
@@ -897,6 +933,14 @@ impl App {
                     "angebot_gueltig" => f.angebot_gueltig = v.trim().parse().unwrap_or(f.angebot_gueltig),
                     "prefix_angebot" => f.prefix_angebot = s.trim().to_string(),
                     "prefix_rechnung" => f.prefix_rechnung = s.trim().to_string(),
+                    "prefix_ab" => f.prefix_ab = s.trim().to_string(),
+                    "prefix_lieferschein" => f.prefix_lieferschein = s.trim().to_string(),
+                    "einleitung_ab" => f.einleitung_ab = s,
+                    "schluss_ab" => f.schluss_ab = s,
+                    "einleitung_lieferschein" => f.einleitung_lieferschein = s,
+                    "schluss_lieferschein" => f.schluss_lieferschein = s,
+                    "mail_betreff_dok" => f.mail_betreff_dok = s,
+                    "mail_text_dok" => f.mail_text_dok = s,
                     "einleitung_angebot" => f.einleitung_angebot = s,
                     "schluss_angebot" => f.schluss_angebot = s,
                     "einleitung_rechnung" => f.einleitung_rechnung = s,

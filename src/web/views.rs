@@ -170,11 +170,11 @@ impl App {
             _ if self.view() == View::Start => "start",
             View::Kunden(_) => "kunden",
             View::Auftraege | View::Auftrag(_) => "auftraege",
-            View::Dokumente(DokArt::Angebot) => "angebote",
             View::Dokumente(DokArt::Rechnung) => "rechnungen",
+            View::Dokumente(_) => "angebote",
             View::Dokument(id) => match self.data.dokument(Some(id)).map(|d| d.art) {
-                Some(DokArt::Angebot) => "angebote",
-                _ => "rechnungen",
+                Some(DokArt::Rechnung) | None => "rechnungen",
+                _ => "angebote",
             },
             View::Finanzen | View::Buchung(_) => "finanzen",
             View::Einstellungen => "einstellungen",
@@ -623,10 +623,12 @@ impl App {
             .unwrap_or_default();
         let _ = write!(
             h,
-            "<div class=\"card actions\">{}{}{}{}{}</div>",
+            "<div class=\"card actions\">{}{}{}{}{}{}{}</div>",
             next,
-            btn("auftrag-dok", "file", "Angebot erstellen", "ghost block", Some(a.id), "angebot"),
-            btn("auftrag-dok", "receipt", "Rechnung erstellen", "ghost block", Some(a.id), "rechnung"),
+            btn("auftrag-dok", "file", "Angebot", "ghost block", Some(a.id), "angebot"),
+            btn("auftrag-dok", "check", "Auftragsbestätigung", "ghost block", Some(a.id), "ab"),
+            btn("auftrag-dok", "pen", "Lieferschein", "ghost block", Some(a.id), "lieferschein"),
+            btn("auftrag-dok", "receipt", "Rechnung", "ghost block", Some(a.id), "rechnung"),
             if a.status != AuftragStatus::Abgelehnt { btn("auftrag-reject", "x", "Als abgelehnt markieren", "ghost block", Some(a.id), "") } else { String::new() },
             btn("auftrag-del", "trash", "Löschen", "ghost block danger-text", Some(a.id), "")
         );
@@ -719,12 +721,30 @@ impl App {
     fn dokumente_html(&self, art: DokArt) -> String {
         let mut h = String::new();
         let n = self.data.dokumente.iter().filter(|x| x.art == art).count();
-        h += &head(art.plural(), &format!("{n} insgesamt"), &btn("dok-neu", "plus", &format!("Neue{} {}", if art == DokArt::Angebot { "s" } else { "" }, art.label()), "primary", None, art.key()), false);
+        h += &head(art.plural(), &format!("{n} insgesamt"), &btn("dok-neu", "plus", art.neu_label(), "primary", None, art.key()), false);
+        if art != DokArt::Rechnung {
+            h += "<div class=\"segmented doc-tabs\">";
+            for a in [DokArt::Angebot, DokArt::Auftragsbestaetigung, DokArt::Lieferschein] {
+                let anzahl = self.data.dokumente.iter().filter(|x| x.art == a).count();
+                let _ = write!(
+                    h,
+                    "<button class=\"{}\" data-act=\"dok-tab\" data-v=\"{}\">{} <em>{anzahl}</em></button>",
+                    if a == art { "active" } else { "" },
+                    a.key(),
+                    a.plural()
+                );
+            }
+            h += "</div>";
+        }
         if n == 0 {
             h += &empty(
-                if art == DokArt::Angebot { "file" } else { "receipt" },
+                if art == DokArt::Rechnung { "receipt" } else { "file" },
                 &format!("Noch keine {}", art.plural()),
-                "Einfach ausfüllen – das PDF mit deinem Logo entsteht automatisch und kann direkt versendet werden.",
+                match art {
+                    DokArt::Auftragsbestaetigung => "Aus einem Angebot oder Auftrag erstellen – der Kunde kann direkt auf dem Tablet unterschreiben.",
+                    DokArt::Lieferschein => "Arbeitsnachweis ohne Preise – vor Ort vom Kunden unterschreiben lassen und daraus die Rechnung erstellen.",
+                    _ => "Einfach ausfüllen – das PDF mit deinem Logo entsteht automatisch und kann direkt versendet werden.",
+                },
                 &btn("dok-neu", "plus", &format!("{} erstellen", art.label()), "primary", None, art.key()),
             );
             return h;
@@ -732,6 +752,7 @@ impl App {
         let filters: Vec<(&str, &str)> = match art {
             DokArt::Angebot => vec![("alle", "Alle"), ("entwurf", "Entwurf"), ("versendet", "Versendet"), ("angenommen", "Angenommen"), ("abgelehnt", "Abgelehnt")],
             DokArt::Rechnung => vec![("alle", "Alle"), ("entwurf", "Entwurf"), ("offen", "Offen"), ("ueberfaellig", "Überfällig"), ("zumahnen", "Zu mahnen"), ("bezahlt", "Bezahlt"), ("storniert", "Storniert")],
+            DokArt::Auftragsbestaetigung | DokArt::Lieferschein => vec![("alle", "Alle"), ("entwurf", "Entwurf"), ("versendet", "Versendet"), ("unterschrieben", "Unterschrieben")],
         };
         let cur = if self.ui.dok_filter.is_empty() { "alle" } else { self.ui.dok_filter.as_str() };
         h += "<div class=\"toolbar\"><div class=\"chips\">";
@@ -773,6 +794,9 @@ impl App {
         if x.kleinunternehmer {
             h += "<p class=\"muted small\">Ohne Umsatzsteuer (§ 19 UStG)</p>";
         }
+        if x.art == DokArt::Lieferschein {
+            h += "<p class=\"muted small\">Nur intern – Preise stehen nicht auf dem Lieferschein.</p>";
+        }
         h
     }
 
@@ -792,9 +816,14 @@ impl App {
         if locked {
             let _ = write!(
                 h,
-                "<div class=\"banner\">{}<div>Dieses Dokument ist <b>{}</b> und damit festgeschrieben. Korrekturen bei Rechnungen bitte per Storno und neuer Rechnung.</div>{}</div>",
+                "<div class=\"banner\">{}<div>Dieses Dokument ist <b>{}</b> und damit festgeschrieben. {}</div>{}</div>",
                 ic("lock"),
                 esc(&x.status.label().to_lowercase()),
+                match x.art {
+                    DokArt::Rechnung => "Korrekturen bitte per Storno und neuer Rechnung.",
+                    _ if x.unterschrift.is_some() => "Es wurde bereits vom Kunden unterschrieben – Änderungen besser als neues Dokument.",
+                    _ => "Für Änderungen bitte ein neues Dokument erstellen oder bewusst entsperren.",
+                },
                 btn("dok-unlock", "unlock", "Trotzdem bearbeiten", "ghost", Some(id), "")
             );
         }
@@ -807,19 +836,34 @@ impl App {
         h += "</div></div>";
         // Daten
         h += "<div class=\"card\"><div class=\"card-head\"><h2>Angaben</h2></div><div class=\"form\">";
-        h += &date_f(if x.art == DokArt::Rechnung { "Rechnungsdatum" } else { "Angebotsdatum" }, "d.datum", &x.datum, ds);
+        h += &date_f(
+            match x.art {
+                DokArt::Rechnung => "Rechnungsdatum",
+                DokArt::Angebot => "Angebotsdatum",
+                _ => "Datum",
+            },
+            "d.datum",
+            &x.datum,
+            ds,
+        );
         h += &text(
-            if x.art == DokArt::Rechnung { "Leistungsdatum / -zeitraum" } else { "Ausführung (optional)" },
+            if matches!(x.art, DokArt::Rechnung | DokArt::Lieferschein) { "Leistungsdatum / -zeitraum" } else { "Ausführung (optional)" },
             "d.leistung",
             &x.leistung,
             &format!("placeholder=\"z. B. {} oder Oktober 2026\"{}", german(&heute), ds),
         );
-        h += &date_f(if x.art == DokArt::Rechnung { "Zahlbar bis" } else { "Gültig bis" }, "d.faellig", &x.faellig, ds);
+        if matches!(x.art, DokArt::Rechnung | DokArt::Angebot) {
+            h += &date_f(if x.art == DokArt::Rechnung { "Zahlbar bis" } else { "Gültig bis" }, "d.faellig", &x.faellig, ds);
+        }
         h += &text("Betreff", "d.betreff", &x.betreff, &format!("placeholder=\"z. B. Wartung Heizungsanlage\"{ds}"));
         h += &area("Einleitung", "d.einleitung", &x.einleitung, 3, ds);
         h += "</div></div>";
         // Positionen
-        h += "<div class=\"card\"><div class=\"card-head\"><h2>Positionen</h2></div><div class=\"positions\">";
+        h += "<div class=\"card\"><div class=\"card-head\"><h2>Positionen</h2></div>";
+        if x.art == DokArt::Lieferschein {
+            h += "<p class=\"hint pad\">Preise erscheinen nicht auf dem Lieferschein – sie werden nur für die spätere Rechnung übernommen.</p>";
+        }
+        h += "<div class=\"positions\">";
         let n = x.positionen.len();
         for (i, p) in x.positionen.iter().enumerate() {
             let ust = if x.kleinunternehmer {
@@ -903,11 +947,28 @@ impl App {
                 if x.status == DokStatus::Entwurf {
                     h += &btn("dok-mark-sent", "check", "Als versendet markieren", "ghost block", Some(id), "");
                 }
+                if x.unterschrift.is_none() && x.status != DokStatus::Abgelehnt {
+                    h += &btn("sig-open", "pen", "Vor Ort unterschreiben lassen", "success block", Some(id), "");
+                }
+                h += &btn("dok-folge", "check", "Auftragsbestätigung", "ghost block", Some(id), "ab");
+                h += &btn("dok-folge", "file", "Lieferschein", "ghost block", Some(id), "lieferschein");
                 h += &btn("dok-to-invoice", "receipt", "In Rechnung umwandeln", "ghost block", Some(id), "");
                 if x.status == DokStatus::Versendet {
                     h += &btn("dok-status", "check", "Angenommen", "ghost block", Some(id), "angenommen");
                     h += &btn("dok-status", "x", "Abgelehnt", "ghost block", Some(id), "abgelehnt");
                 }
+            }
+            DokArt::Auftragsbestaetigung | DokArt::Lieferschein => {
+                if x.status == DokStatus::Entwurf {
+                    h += &btn("dok-mark-sent", "check", "Als versendet markieren", "ghost block", Some(id), "");
+                }
+                if x.unterschrift.is_none() {
+                    h += &btn("sig-open", "pen", "Unterschreiben lassen", "success block", Some(id), "");
+                }
+                if x.art == DokArt::Auftragsbestaetigung {
+                    h += &btn("dok-folge", "file", "Lieferschein", "ghost block", Some(id), "lieferschein");
+                }
+                h += &btn("dok-folge", "receipt", "Rechnung erstellen", "ghost block", Some(id), "rechnung");
             }
         }
         h += &btn("dok-dup", "copy", "Duplizieren", "ghost block", Some(id), "");
@@ -919,6 +980,22 @@ impl App {
             if x.kleinunternehmer { " checked" } else { "" }
         );
         h += "</div>";
+        // Unterschrift
+        if let Some(u) = &x.unterschrift {
+            let unter = [u.name.trim().to_string(), u.ort.trim().to_string(), german(&u.datum)]
+                .into_iter()
+                .filter(|s| !s.is_empty())
+                .collect::<Vec<_>>()
+                .join(" · ");
+            let _ = write!(
+                h,
+                "<div class=\"card\"><div class=\"card-head\"><h2>Unterschrift</h2><button class=\"icon-btn sm danger-text\" data-act=\"sig-del\" data-id=\"{id}\" title=\"Unterschrift entfernen\">{}</button></div><div class=\"sig-show\">{}</div><p class=\"sig-meta\">{} {}</p></div>",
+                ic("trash"),
+                super::signature::sig_svg(u),
+                ic("check"),
+                esc(&unter)
+            );
+        }
         // Zahlungen
         if !x.zahlungen.is_empty() {
             h += "<div class=\"card\"><div class=\"card-head\"><h2>Zahlungen</h2></div><div class=\"rows\">";

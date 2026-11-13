@@ -31,6 +31,11 @@ Kunden, Aufträge, Angebote, Rechnungen und Finanzen an einem Ort – **komplett
   Samsung E-Mail …) – oder an WhatsApp/Drive teilen; PDF ansehen oder in *Download/WWP* speichern
 - Fortlaufende Nummern je Jahr (AN-2026-0001, RE-2026-0001), Präfixe einstellbar
 - Angebot → Rechnung mit einem Tipp, Duplizieren
+- **Auftragsbestätigung** und **Lieferschein/Arbeitsnachweis** (ohne Preise) als eigene Dokumente mit Nummernkreis,
+  erstellt aus Angebot oder Auftrag; aus dem Lieferschein wird mit einem Tipp die Rechnung
+- **Unterschrift per S-Pen**: Der Kunde unterschreibt direkt auf dem Tablet (Druckstufen, Handballen wird
+  ignoriert) – Angebot angenommen, Auftrag bestätigt oder Leistung abgenommen; die Unterschrift erscheint als
+  Vektor-Tinte mit Ort, Datum und Name im PDF, der Auftrag läuft automatisch mit
 - **GiroCode** (EPC-QR-Code) auf Rechnungen und Mahnungen: Banking-App scannen, Empfänger, IBAN, Betrag und
   Verwendungszweck sind ausgefüllt; IBAN-Prüfung in den Einstellungen
 - **Mahnwesen**: Zahlungserinnerung → 1. Mahnung → 2. Mahnung mit eigenen Fristen, Gebühren und Texten,
@@ -115,6 +120,8 @@ src/web/      Oberfläche (wasm-bindgen / web-sys)
   views.rs      HTML aller Ansichten
   actions.rs    Klicks, Eingaben, Senden/Speichern
   storage.rs    IndexedDB, Dateien (Logo, Belege), Backup, Android-Brücke
+  signature.rs  Unterschriftenfeld (S-Pen, Druck, Handballen-Filter)
+  settings.rs   Einstellungen mit Bereichen und Live-Vorschau
 web/          index.html, style.css, Manifest, Icons, Service Worker
 android/      Android-Hülle (WebView) mit Brücke für Speichern, PDF öffnen, E-Mail/Teilen und Kamera
 ```

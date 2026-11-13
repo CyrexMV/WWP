@@ -29,6 +29,7 @@ features = [
   "Navigator", "ServiceWorkerContainer", "IdbFactory", "IdbDatabase", "IdbOpenDbRequest",
   "IdbRequest", "IdbObjectStore", "IdbTransaction", "IdbTransactionMode", "DomStringList",
   "VisibilityState", "DomTokenList", "CssStyleDeclaration", "Location",
+  "HtmlCanvasElement", "CanvasRenderingContext2d", "PointerEvent", "DomRect",
 ]
 
 [profile.release]

@@ -9,6 +9,7 @@ der Stand wird im GitHub-Project-Board verfolgt.
 |---|----------|---------|
 | [#3](https://github.com/CyrexMV/WWP/issues/3) | ✅ GiroCode (QR-Code zum Bezahlen) auf Rechnungen | Rechnungen |
 | [#4](https://github.com/CyrexMV/WWP/issues/4) | ✅ Mahnwesen mit Mahnstufen und Teilzahlungen | Rechnungen |
+| [#11](https://github.com/CyrexMV/WWP/issues/11) | ✅ Unterschrift per S-Pen, Auftragsbestätigung und Lieferschein | Rechnungen, Aufträge |
 | [#28](https://github.com/CyrexMV/WWP/issues/28) | ✅ Buttons modernisieren | Design |
 | – | ✅ Einstellungen neu gestaltet (Bereiche, Live-Vorschau, Einrichtungsstand) | Design |
 
@@ -29,7 +30,6 @@ der Stand wird im GitHub-Project-Board verfolgt.
 | [#8](https://github.com/CyrexMV/WWP/issues/8) | Abschlags- und Schlussrechnungen | Rechnungen |
 | [#9](https://github.com/CyrexMV/WWP/issues/9) | Rabatt und Skonto | Rechnungen |
 | [#10](https://github.com/CyrexMV/WWP/issues/10) | Wiederkehrende Rechnungen (z. B. Wartungsverträge) | Rechnungen |
-| [#11](https://github.com/CyrexMV/WWP/issues/11) | Unterschrift per S-Pen, Auftragsbestätigung und Lieferschein | Rechnungen, Aufträge |
 | [#12](https://github.com/CyrexMV/WWP/issues/12) | Positionsgruppen, Zwischensummen und optionale Positionen | Rechnungen |
 | [#13](https://github.com/CyrexMV/WWP/issues/13) | Fotos, Dateien und Skizzen am Auftrag | Aufträge |
 | [#14](https://github.com/CyrexMV/WWP/issues/14) | Termine und Kalenderansicht | Aufträge |
@@ -57,6 +57,6 @@ der Stand wird im GitHub-Project-Board verfolgt.
 1. **Absichern:** #1 Praxistest, #5 Backup, #6 App-Sperre
 2. ~~**Schneller bezahlt werden:** #3 GiroCode, #4 Mahnwesen~~ ✅
 3. **Rechtssicher bleiben:** #2 E-Rechnung (vor der B2B-Pflicht)
-4. **Arbeit vor Ort:** #7 Zeiterfassung, #11 Unterschrift, #13 Fotos, #14 Termine
+4. **Arbeit vor Ort:** #7 Zeiterfassung, ~~#11 Unterschrift~~ ✅, #13 Fotos, #14 Termine
 5. **Weniger Tipparbeit in den Finanzen:** #17 Bankimport, #18 wiederkehrende Ausgaben, #21 Belegerkennung
 6. Danach nach Bedarf

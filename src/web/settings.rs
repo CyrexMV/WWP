@@ -175,8 +175,10 @@ impl App {
         let f = &self.data.firma;
         let bsp = |p: &str| if p.trim().is_empty() { "2026-0001".to_string() } else { format!("{}-2026-0001", p.trim()) };
         format!(
-            "<span class=\"pill\">Angebot <b>{}</b></span><span class=\"pill\">Rechnung <b>{}</b></span>",
+            "<span class=\"pill\">Angebot <b>{}</b></span><span class=\"pill\">Auftragsbestätigung <b>{}</b></span><span class=\"pill\">Lieferschein <b>{}</b></span><span class=\"pill\">Rechnung <b>{}</b></span>",
             esc(&bsp(&f.prefix_angebot)),
+            esc(&bsp(&f.prefix_ab)),
+            esc(&bsp(&f.prefix_lieferschein)),
             esc(&bsp(&f.prefix_rechnung))
         )
     }
@@ -375,9 +377,11 @@ impl App {
             "Nummernkreise",
             "Nummern laufen je Jahr fortlaufend und lückenlos – so wie das Finanzamt es erwartet.",
             &format!(
-                "<div class=\"form\">{}{}</div><div class=\"nr-bsp\" id=\"nr-bsp\">{}</div>",
+                "<div class=\"form\">{}{}{}{}</div><div class=\"nr-bsp\" id=\"nr-bsp\">{}</div>",
                 text("Präfix Angebote", "f.prefix_angebot", &f.prefix_angebot, "autocapitalize=\"characters\""),
                 text("Präfix Rechnungen", "f.prefix_rechnung", &f.prefix_rechnung, "autocapitalize=\"characters\""),
+                text("Präfix Auftragsbestätigungen", "f.prefix_ab", &f.prefix_ab, "autocapitalize=\"characters\""),
+                text("Präfix Lieferscheine", "f.prefix_lieferschein", &f.prefix_lieferschein, "autocapitalize=\"characters\""),
                 self.nr_beispiel()
             ),
         );
@@ -462,6 +466,34 @@ impl App {
                 text("E-Mail-Betreff", "f.mail_betreff_rechnung", &f.mail_betreff_rechnung, ""),
                 area("E-Mail-Text", "f.mail_text_rechnung", &f.mail_text_rechnung, 6, ""),
                 placeholders(&["nummer", "betrag", "faellig", "zahlungsziel", "datum", "firma", "kunde", "ansprechpartner"])
+            ),
+        );
+        h += &group(
+            "Auftragsbestätigungen",
+            "",
+            &format!(
+                "<div class=\"form\">{}{}</div>",
+                area("Einleitung", "f.einleitung_ab", &f.einleitung_ab, 2, ""),
+                area("Schluss", "f.schluss_ab", &f.schluss_ab, 2, "")
+            ),
+        );
+        h += &group(
+            "Lieferscheine",
+            "Lieferscheine zeigen keine Preise – ideal als Arbeitsnachweis mit Kundenunterschrift.",
+            &format!(
+                "<div class=\"form\">{}{}</div>",
+                area("Einleitung", "f.einleitung_lieferschein", &f.einleitung_lieferschein, 2, ""),
+                area("Schluss", "f.schluss_lieferschein", &f.schluss_lieferschein, 2, "")
+            ),
+        );
+        h += &group(
+            "E-Mail für Auftragsbestätigungen und Lieferscheine",
+            "",
+            &format!(
+                "<div class=\"form\">{}{}</div>{}",
+                text("Betreff", "f.mail_betreff_dok", &f.mail_betreff_dok, ""),
+                area("Text", "f.mail_text_dok", &f.mail_text_dok, 5, ""),
+                placeholders(&["titel", "nummer", "datum", "firma", "kunde", "ansprechpartner"])
             ),
         );
         h

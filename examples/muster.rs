@@ -42,6 +42,28 @@ fn main() {
         let name = format!("{}/{}.pdf", dir, doc.nummer);
         std::fs::write(&name, bytes).unwrap();
         println!("{name}");
+        if art == DokArt::Angebot {
+            // Auftragsbestätigung (ohne Unterschrift) und unterschriebener Lieferschein
+            let ab = d.folgedokument(r, DokArt::Auftragsbestaetigung, heute).unwrap();
+            let ls = d.folgedokument(ab, DokArt::Lieferschein, heute).unwrap();
+            let striche: Vec<Vec<[f32; 3]>> = (0..3)
+                .map(|k| {
+                    (0..60)
+                        .map(|i| {
+                            let t = i as f32 / 60.0;
+                            [0.05 + k as f32 * 0.3 + t * 0.28, 0.16 + (t * 12.0 + k as f32).sin() * 0.07 * (1.0 - t * 0.5), 0.3 + 0.6 * (t * 3.1).sin().abs()]
+                        })
+                        .collect()
+                })
+                .collect();
+            d.unterschreiben(ls, Unterschrift { striche, name: "Anna Schön".into(), ort: "München".into(), datum: heute.into() }, heute);
+            for id in [ab, ls] {
+                let doc = d.dokument(Some(id)).unwrap().clone();
+                let name = format!("{}/{}.pdf", dir, doc.nummer);
+                std::fs::write(&name, pdf::dokument_pdf(&d, &doc, None)).unwrap();
+                println!("{name}");
+            }
+        }
         if art == DokArt::Rechnung {
             // Mahnung mit Gebühr und Verzugszinsen nach einer Teilzahlung
             d.dokument_mut(r).unwrap().status = DokStatus::Versendet;

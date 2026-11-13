@@ -37,6 +37,8 @@ pub struct Firma {
     pub angebot_gueltig: u32,
     pub prefix_angebot: String,
     pub prefix_rechnung: String,
+    pub prefix_ab: String,
+    pub prefix_lieferschein: String,
     pub einleitung_angebot: String,
     pub schluss_angebot: String,
     pub einleitung_rechnung: String,
@@ -45,6 +47,13 @@ pub struct Firma {
     pub mail_text_angebot: String,
     pub mail_betreff_rechnung: String,
     pub mail_text_rechnung: String,
+    pub einleitung_ab: String,
+    pub schluss_ab: String,
+    pub einleitung_lieferschein: String,
+    pub schluss_lieferschein: String,
+    /// E-Mail für Auftragsbestätigungen und Lieferscheine
+    pub mail_betreff_dok: String,
+    pub mail_text_dok: String,
     /// Akzentfarbe der PDFs als „#rrggbb“.
     pub farbe: String,
     /// Logo (Datei-ID im Dateispeicher).
@@ -95,6 +104,14 @@ impl Default for Firma {
             angebot_gueltig: 30,
             prefix_angebot: "AN".into(),
             prefix_rechnung: "RE".into(),
+            prefix_ab: "AB".into(),
+            prefix_lieferschein: "LS".into(),
+            einleitung_ab: "vielen Dank für Ihren Auftrag, den wir hiermit gerne bestätigen. Wir führen folgende Leistungen für Sie aus:".into(),
+            schluss_ab: "Bitte prüfen Sie die Angaben. Wir freuen uns auf die Zusammenarbeit!".into(),
+            einleitung_lieferschein: "folgende Leistungen bzw. Lieferungen wurden erbracht:".into(),
+            schluss_lieferschein: "Die Leistungen wurden vollständig und ordnungsgemäß erbracht.".into(),
+            mail_betreff_dok: "{titel} {nummer} – {firma}".into(),
+            mail_text_dok: "Guten Tag {ansprechpartner},\n\nanbei erhalten Sie das Dokument „{titel} {nummer}“.\n\nMit freundlichen Grüßen\n{firma}".into(),
             einleitung_angebot: "vielen Dank für Ihre Anfrage. Gerne unterbreiten wir Ihnen folgendes Angebot:".into(),
             schluss_angebot: "Dieses Angebot ist gültig bis zum {gueltig}. Wir freuen uns auf Ihren Auftrag!".into(),
             einleitung_rechnung: "vielen Dank für Ihren Auftrag. Wir berechnen Ihnen folgende Leistungen:".into(),
@@ -331,33 +348,56 @@ pub enum DokArt {
     #[default]
     Angebot,
     Rechnung,
+    Auftragsbestaetigung,
+    Lieferschein,
 }
 
 impl DokArt {
+    pub const ALLE: [DokArt; 4] = [DokArt::Angebot, DokArt::Auftragsbestaetigung, DokArt::Lieferschein, DokArt::Rechnung];
+
     pub fn label(self) -> &'static str {
         match self {
             DokArt::Angebot => "Angebot",
             DokArt::Rechnung => "Rechnung",
+            DokArt::Auftragsbestaetigung => "Auftragsbestätigung",
+            DokArt::Lieferschein => "Lieferschein",
         }
     }
     pub fn plural(self) -> &'static str {
         match self {
             DokArt::Angebot => "Angebote",
             DokArt::Rechnung => "Rechnungen",
+            DokArt::Auftragsbestaetigung => "Auftragsbestätigungen",
+            DokArt::Lieferschein => "Lieferscheine",
         }
     }
     pub fn key(self) -> &'static str {
         match self {
             DokArt::Angebot => "angebot",
             DokArt::Rechnung => "rechnung",
+            DokArt::Auftragsbestaetigung => "ab",
+            DokArt::Lieferschein => "lieferschein",
         }
     }
     pub fn from_key(k: &str) -> Option<Self> {
-        match k {
-            "angebot" => Some(DokArt::Angebot),
-            "rechnung" => Some(DokArt::Rechnung),
-            _ => None,
+        Self::ALLE.into_iter().find(|a| a.key() == k)
+    }
+    /// „ein Angebot“, „eine Rechnung“ … für Texte
+    pub fn neu_label(self) -> &'static str {
+        match self {
+            DokArt::Angebot => "Neues Angebot",
+            DokArt::Rechnung => "Neue Rechnung",
+            DokArt::Auftragsbestaetigung => "Neue Auftragsbestätigung",
+            DokArt::Lieferschein => "Neuer Lieferschein",
         }
+    }
+    /// Zeigt das Dokument Preise und Summen?
+    pub fn mit_preisen(self) -> bool {
+        self != DokArt::Lieferschein
+    }
+    /// Kann der Kunde das Dokument unterschreiben?
+    pub fn unterschreibbar(self) -> bool {
+        self != DokArt::Rechnung
     }
 }
 
@@ -370,6 +410,7 @@ pub enum DokStatus {
     Abgelehnt,
     Bezahlt,
     Storniert,
+    Unterschrieben,
 }
 
 impl DokStatus {
@@ -381,6 +422,7 @@ impl DokStatus {
             DokStatus::Abgelehnt => "Abgelehnt",
             DokStatus::Bezahlt => "Bezahlt",
             DokStatus::Storniert => "Storniert",
+            DokStatus::Unterschrieben => "Unterschrieben",
         }
     }
     pub fn key(self) -> &'static str {
@@ -391,6 +433,7 @@ impl DokStatus {
             DokStatus::Abgelehnt => "abgelehnt",
             DokStatus::Bezahlt => "bezahlt",
             DokStatus::Storniert => "storniert",
+            DokStatus::Unterschrieben => "unterschrieben",
         }
     }
     pub fn from_key(k: &str) -> Option<Self> {
@@ -401,6 +444,7 @@ impl DokStatus {
             DokStatus::Abgelehnt,
             DokStatus::Bezahlt,
             DokStatus::Storniert,
+            DokStatus::Unterschrieben,
         ]
         .into_iter()
         .find(|s| s.key() == k)
@@ -410,6 +454,7 @@ impl DokStatus {
         match art {
             DokArt::Angebot => &[DokStatus::Entwurf, DokStatus::Versendet, DokStatus::Angenommen, DokStatus::Abgelehnt],
             DokArt::Rechnung => &[DokStatus::Entwurf, DokStatus::Versendet, DokStatus::Bezahlt, DokStatus::Storniert],
+            DokArt::Auftragsbestaetigung | DokArt::Lieferschein => &[DokStatus::Entwurf, DokStatus::Versendet, DokStatus::Unterschrieben],
         }
     }
 }
@@ -446,6 +491,29 @@ pub struct Summen {
     pub ust: Cents,
     pub brutto: Cents,
 }
+
+/// Handschriftliche Unterschrift (z. B. mit dem S-Pen auf dem Tablet).
+///
+/// Striche als Punktfolgen `[x, y, Druck]`; x und y sind auf die Breite des Unterschriftenfelds
+/// normiert (0…1, Feld im Seitenverhältnis 3:1, also y bis ≈ 0,33).
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(default)]
+pub struct Unterschrift {
+    pub striche: Vec<Vec<[f32; 3]>>,
+    pub name: String,
+    pub ort: String,
+    pub datum: String,
+}
+
+impl Unterschrift {
+    /// Enthält die Unterschrift genug Tinte?
+    pub fn gueltig(&self) -> bool {
+        self.striche.iter().map(|s| s.len()).sum::<usize>() >= 4
+    }
+}
+
+/// Seitenverhältnis des Unterschriftenfelds (Breite : Höhe).
+pub const UNTERSCHRIFT_VERHAELTNIS: f32 = 3.0;
 
 /// Zahlungserinnerung bzw. Mahnung zu einer Rechnung (Stand zum Zeitpunkt der Erstellung).
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
@@ -518,6 +586,8 @@ pub struct Dokument {
     pub versendet_am: String,
     pub mahnungen: Vec<Mahnung>,
     pub zahlungen: Vec<Zahlung>,
+    /// Unterschrift des Kunden (Angebot angenommen, Auftrag bestätigt, Lieferung erhalten)
+    pub unterschrift: Option<Unterschrift>,
 }
 
 impl Dokument {
@@ -651,7 +721,8 @@ impl Dokument {
             .map(|k| format!("{} {}", k.anrede.trim(), k.ansprechpartner.trim()).trim().to_string())
             .filter(|s| !s.is_empty())
             .unwrap_or_default();
-        text.replace("{nummer}", &self.nummer)
+        text.replace("{titel}", &self.titel())
+            .replace("{nummer}", &self.nummer)
             .replace("{betrag}", &money::fmt_eur(s.brutto))
             .replace("{faellig}", &date::german(&self.faellig))
             .replace("{gueltig}", &date::german(&self.faellig))
@@ -972,13 +1043,18 @@ impl Data {
         let id = self.new_id();
         let y = date::year(heute).unwrap_or(2026);
         let f = self.firma.clone();
-        let nummer = match art {
-            DokArt::Angebot => self.next_number(&f.prefix_angebot, y, 4),
-            DokArt::Rechnung => self.next_number(&f.prefix_rechnung, y, 4),
+        let prefix = match art {
+            DokArt::Angebot => &f.prefix_angebot,
+            DokArt::Rechnung => &f.prefix_rechnung,
+            DokArt::Auftragsbestaetigung => &f.prefix_ab,
+            DokArt::Lieferschein => &f.prefix_lieferschein,
         };
+        let nummer = self.next_number(prefix, y, 4);
         let (einleitung, schluss, tage) = match art {
-            DokArt::Angebot => (f.einleitung_angebot.clone(), f.schluss_angebot.clone(), f.angebot_gueltig),
-            DokArt::Rechnung => (f.einleitung_rechnung.clone(), f.schluss_rechnung.clone(), f.zahlungsziel),
+            DokArt::Angebot => (f.einleitung_angebot.clone(), f.schluss_angebot.clone(), Some(f.angebot_gueltig)),
+            DokArt::Rechnung => (f.einleitung_rechnung.clone(), f.schluss_rechnung.clone(), Some(f.zahlungsziel)),
+            DokArt::Auftragsbestaetigung => (f.einleitung_ab.clone(), f.schluss_ab.clone(), None),
+            DokArt::Lieferschein => (f.einleitung_lieferschein.clone(), f.schluss_lieferschein.clone(), None),
         };
         let kunde_rec = self.kunde(kunde).cloned();
         let auftrag_rec = self.auftrag(auftrag).cloned();
@@ -1008,8 +1084,8 @@ impl Data {
             auftrag_id: auftrag,
             empfaenger,
             datum: heute.into(),
-            leistung: if art == DokArt::Rechnung { date::german(heute) } else { String::new() },
-            faellig: date::add_days(heute, tage as i64),
+            leistung: if matches!(art, DokArt::Rechnung | DokArt::Lieferschein) { date::german(heute) } else { String::new() },
+            faellig: tage.map(|t| date::add_days(heute, t as i64)).unwrap_or_default(),
             betreff,
             einleitung: format!("{anrede}\n\n{einleitung}"),
             positionen,
@@ -1036,6 +1112,80 @@ impl Data {
             }
         }
         Some(id)
+    }
+
+    /// Folgedokument aus einem bestehenden (z. B. Angebot → Auftragsbestätigung, Lieferschein → Rechnung):
+    /// gleiche Positionen, Anschrift und Betreff, neue Nummer.
+    pub fn folgedokument(&mut self, src: Id, art: DokArt, heute: &str) -> Option<Id> {
+        let a = self.dokument(Some(src))?.clone();
+        if art == DokArt::Rechnung && a.art == DokArt::Angebot {
+            return self.rechnung_aus_angebot(src, heute);
+        }
+        let id = self.neues_dokument(art, a.kunde_id, a.auftrag_id, heute);
+        let d = self.dokument_mut(id)?;
+        d.positionen = a.positionen.clone();
+        d.empfaenger = a.empfaenger.clone();
+        d.betreff = a.betreff.clone();
+        d.kleinunternehmer = a.kleinunternehmer;
+        d.aus_angebot = if a.art == DokArt::Angebot { Some(src) } else { a.aus_angebot };
+        if a.art == DokArt::Lieferschein && art == DokArt::Rechnung && !a.leistung.trim().is_empty() {
+            d.leistung = a.leistung.clone();
+        }
+        if a.art == DokArt::Angebot && art == DokArt::Auftragsbestaetigung {
+            if let Some(an) = self.dokument_mut(src) {
+                if an.status == DokStatus::Entwurf || an.status == DokStatus::Versendet {
+                    an.status = DokStatus::Angenommen;
+                }
+            }
+            if let Some(aid) = a.auftrag_id {
+                if self.auftrag(Some(aid)).map(|x| x.status <= AuftragStatus::Angebot).unwrap_or(false) {
+                    self.auftrag_status(aid, AuftragStatus::Beauftragt, heute);
+                }
+            }
+        }
+        Some(id)
+    }
+
+    /// Unterschrift des Kunden übernehmen: Angebot → angenommen, Auftragsbestätigung/Lieferschein →
+    /// unterschrieben; der Auftrag läuft mit (beauftragt bzw. erledigt).
+    pub fn unterschreiben(&mut self, dok: Id, u: Unterschrift, heute: &str) -> bool {
+        if !u.gueltig() {
+            return false;
+        }
+        let Some(x) = self.dokument_mut(dok) else { return false };
+        if !x.art.unterschreibbar() {
+            return false;
+        }
+        let art = x.art;
+        x.unterschrift = Some(u);
+        x.status = match art {
+            DokArt::Angebot => DokStatus::Angenommen,
+            _ => DokStatus::Unterschrieben,
+        };
+        if x.versendet_am.is_empty() {
+            x.versendet_am = heute.into();
+        }
+        if let Some(aid) = x.auftrag_id {
+            let st = self.auftrag(Some(aid)).map(|a| a.status);
+            match (art, st) {
+                (DokArt::Angebot | DokArt::Auftragsbestaetigung, Some(s)) if s <= AuftragStatus::Angebot => {
+                    self.auftrag_status(aid, AuftragStatus::Beauftragt, heute)
+                }
+                (DokArt::Lieferschein, Some(s)) if s < AuftragStatus::Erledigt => self.auftrag_status(aid, AuftragStatus::Erledigt, heute),
+                _ => {}
+            }
+        }
+        true
+    }
+
+    /// Unterschrift entfernen (Status zurück auf „Versendet“).
+    pub fn unterschrift_entfernen(&mut self, dok: Id) {
+        if let Some(x) = self.dokument_mut(dok) {
+            x.unterschrift = None;
+            if matches!(x.status, DokStatus::Angenommen | DokStatus::Unterschrieben) {
+                x.status = DokStatus::Versendet;
+            }
+        }
     }
 
     /// Kopie eines Dokuments (neue Nummer, Status Entwurf, heutiges Datum).
@@ -1529,6 +1679,43 @@ mod tests {
         assert_eq!(x.zahlungen.len(), 1);
         assert_eq!(x.rest(), 0);
         assert_eq!(e.version, 2);
+    }
+
+    #[test]
+    fn order_confirmation_delivery_note_and_signature() {
+        let (mut d, k) = demo();
+        let a = d.neuer_auftrag(Some(k), "2026-11-01");
+        d.auftrag_status(a, AuftragStatus::Angebot, "2026-11-02");
+        let an = d.neues_dokument(DokArt::Angebot, Some(k), Some(a), "2026-11-02");
+        d.dokument_mut(an).unwrap().positionen[0].preis = 10_000;
+        // Angebot vor Ort unterschreiben
+        let sig = Unterschrift { striche: vec![vec![[0.1, 0.1, 0.5], [0.2, 0.15, 0.6], [0.3, 0.1, 0.4], [0.4, 0.2, 0.5]]], name: "Erika Mustermann".into(), ort: "Berlin".into(), datum: "2026-11-03".into() };
+        assert!(!d.unterschreiben(an, Unterschrift::default(), "2026-11-03"));
+        assert!(d.unterschreiben(an, sig.clone(), "2026-11-03"));
+        assert_eq!(d.dokument(Some(an)).unwrap().status, DokStatus::Angenommen);
+        assert_eq!(d.auftrag(Some(a)).unwrap().status, AuftragStatus::Beauftragt);
+        // Auftragsbestätigung und Lieferschein aus dem Angebot
+        let ab = d.folgedokument(an, DokArt::Auftragsbestaetigung, "2026-11-04").unwrap();
+        let x = d.dokument(Some(ab)).unwrap();
+        assert_eq!(x.nummer, "AB-2026-0001");
+        assert_eq!(x.positionen[0].preis, 10_000);
+        assert_eq!(x.aus_angebot, Some(an));
+        assert!(x.faellig.is_empty());
+        let ls = d.folgedokument(ab, DokArt::Lieferschein, "2026-11-10").unwrap();
+        assert_eq!(d.dokument(Some(ls)).unwrap().nummer, "LS-2026-0001");
+        assert!(d.unterschreiben(ls, sig, "2026-11-10"));
+        assert_eq!(d.dokument(Some(ls)).unwrap().status, DokStatus::Unterschrieben);
+        assert_eq!(d.auftrag(Some(a)).unwrap().status, AuftragStatus::Erledigt);
+        // Lieferschein → Rechnung übernimmt Preise und Leistungsdatum
+        let re = d.folgedokument(ls, DokArt::Rechnung, "2026-11-12").unwrap();
+        let r = d.dokument(Some(re)).unwrap();
+        assert_eq!(r.summen().netto, 10_000);
+        assert_eq!(r.leistung, "10.11.2026");
+        // Rechnungen sind nicht unterschreibbar
+        assert!(!d.unterschreiben(re, Unterschrift { striche: vec![vec![[0.0, 0.0, 0.5]; 4]], ..Default::default() }, "2026-11-12"));
+        d.unterschrift_entfernen(ls);
+        assert_eq!(d.dokument(Some(ls)).unwrap().status, DokStatus::Versendet);
+        assert_eq!(DokArt::from_key("ab"), Some(DokArt::Auftragsbestaetigung));
     }
 
     #[test]
