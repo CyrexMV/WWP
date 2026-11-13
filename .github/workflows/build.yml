@@ -1,0 +1,118 @@
+name: WWP Büro bauen (Web + APK) & veröffentlichen
+
+# 1. Testet und baut die Rust/WebAssembly-App
+# 2. Packt sie in eine Android-APK (android/)
+# 3. Legt Web-App + wwp.apk auf den Branch `gh-pages` (GitHub Pages) und als Artefakt ab
+on:
+  push:
+    branches: [main, master, 'claude/**', 'ccr-**']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - name: wasm-bindgen installieren
+        run: cargo install wasm-bindgen-cli --version 0.2.130 --locked
+      - name: Tests
+        run: cargo test
+      - name: Web-App bauen
+        run: ./build.sh
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Android SDK prüfen (auf GitHub-Runnern vorinstalliert)
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          ls "$ANDROID_HOME/platforms" "$ANDROID_HOME/build-tools" | tail -n 20
+      - name: APK bauen (mit festem Signaturschlüssel)
+        working-directory: android
+        env:
+          # Einfachster Weg: nur ein Passwort als Secret anlegen. Der Schlüssel wird beim ersten
+          # Lauf erzeugt und NUR VERSCHLÜSSELT (AES-256) im Branch „signing“ abgelegt.
+          WWP_SIGNING_PASSWORD: ${{ secrets.WWP_SIGNING_PASSWORD }}
+          # Alternative: kompletter eigener Keystore als Secrets
+          WWP_KEYSTORE_B64: ${{ secrets.WWP_KEYSTORE_B64 }}
+          WWP_KEYSTORE_PASSWORD: ${{ secrets.WWP_KEYSTORE_PASSWORD }}
+          WWP_KEY_ALIAS: ${{ secrets.WWP_KEY_ALIAS }}
+          WWP_KEY_PASSWORD: ${{ secrets.WWP_KEY_PASSWORD }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          KS="$RUNNER_TEMP/release.jks"
+          if [ -n "$WWP_KEYSTORE_B64" ]; then
+            echo "$WWP_KEYSTORE_B64" | base64 -d > "$KS"
+            export WWP_KEYSTORE="$KS"
+            echo "Signiere mit Keystore aus WWP_KEYSTORE_B64."
+          elif [ -n "$WWP_SIGNING_PASSWORD" ]; then
+            if [ ${#WWP_SIGNING_PASSWORD} -lt 12 ]; then
+              echo "::error::WWP_SIGNING_PASSWORD ist zu kurz – bitte mindestens 12 Zeichen (besser 20+) verwenden."
+              exit 1
+            fi
+            ENC="$RUNNER_TEMP/keystore.enc"
+            if git ls-remote --exit-code --heads origin signing >/dev/null 2>&1; then
+              git fetch -q origin signing
+              git show FETCH_HEAD:keystore.enc > "$ENC"
+              if ! openssl enc -d -aes-256-cbc -pbkdf2 -iter 1000000 -in "$ENC" -out "$KS" -pass env:WWP_SIGNING_PASSWORD; then
+                echo "::error::Signaturschlüssel konnte nicht entschlüsselt werden. Wurde WWP_SIGNING_PASSWORD geändert? Altes Passwort wieder eintragen (oder Branch „signing“ löschen, um einen neuen Schlüssel zu erzeugen – dann muss die App einmal neu installiert werden)."
+                exit 1
+              fi
+              echo "Fester Signaturschlüssel geladen."
+            else
+              echo "Erzeuge neuen festen Signaturschlüssel …"
+              keytool -genkeypair -keystore "$KS" -storetype PKCS12 -alias wwp -keyalg RSA -keysize 4096 \
+                -validity 36500 -storepass "$WWP_SIGNING_PASSWORD" -keypass "$WWP_SIGNING_PASSWORD" \
+                -dname "CN=WWP Buero, O=Privat, C=DE"
+              openssl enc -aes-256-cbc -pbkdf2 -iter 1000000 -salt -in "$KS" -out "$ENC" -pass env:WWP_SIGNING_PASSWORD
+              (
+                mkdir -p "$RUNNER_TEMP/signing" && cp "$ENC" "$RUNNER_TEMP/signing/keystore.enc" && cd "$RUNNER_TEMP/signing"
+                printf '%s\n' "# Signaturschlüssel (verschlüsselt)" "" \
+                  "keystore.enc ist der APK-Signaturschlüssel, verschlüsselt mit AES-256 (PBKDF2, 1.000.000 Runden)." \
+                  "Ohne das Passwort aus dem Secret WWP_SIGNING_PASSWORD ist die Datei nutzlos." \
+                  "Diesen Branch nicht löschen – sonst muss die App einmal neu installiert werden." > README.md
+                git init -q -b signing
+                git add -A
+                git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+                  commit -q -m "Verschlüsselter Signaturschlüssel"
+                git push -q "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" signing
+              )
+              echo "Neuer fester Signaturschlüssel erzeugt und verschlüsselt gespeichert."
+            fi
+            export WWP_KEYSTORE="$KS" WWP_KEY_ALIAS=wwp WWP_KEYSTORE_PASSWORD="$WWP_SIGNING_PASSWORD" WWP_KEY_PASSWORD="$WWP_SIGNING_PASSWORD"
+          else
+            echo "::warning::Kein Secret WWP_SIGNING_PASSWORD gesetzt – APK wird mit temporärem Schlüssel signiert. Updates erfordern dann eine Neuinstallation."
+          fi
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleRelease
+          cp app/build/outputs/apk/release/app-release.apk ../web/wwp.apk
+          ls -la ../web/wwp.apk
+          rm -f "$KS"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wwp-apk
+          path: web/wwp.apk
+
+      - name: Auf gh-pages veröffentlichen
+        run: |
+          cd web
+          touch .nojekyll
+          git init -q -b gh-pages
+          git add -A
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -q -m "Veröffentlichung von ${GITHUB_SHA::7}"
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git" gh-pages
