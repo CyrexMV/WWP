@@ -240,6 +240,7 @@ impl App {
         h += "</section>";
 
         h += "<section class=\"grid2\">";
+        h += &self.heute_card(&heute);
         // Diagramm
         h += &format!(
             "<div class=\"card\"><div class=\"card-head\"><h2>Einnahmen &amp; Ausgaben {jahr}</h2><div class=\"legend\"><i class=\"in\"></i>Einnahmen <i class=\"out\"></i>Ausgaben</div></div>{}</div>",
@@ -610,6 +611,7 @@ impl App {
         h += &area("Beschreibung der Anfrage", "a.beschreibung", &a.beschreibung, 5, "placeholder=\"Was wünscht der Kunde? Umfang, Ort, Besonderheiten …\"");
         h += &area("Interne Notizen", "a.notizen", &a.notizen, 3, "");
         h += "</div></div>";
+        h += &self.zeiten_card(a.id);
         // Verlauf
         h += "<div class=\"card\"><div class=\"card-head\"><h2>Verlauf</h2></div><ul class=\"timeline\">";
         for v in a.verlauf.iter().rev() {
@@ -1178,6 +1180,84 @@ impl App {
     // Finanzen
     // -----------------------------------------------------------------------
 
+    /// Steuerrücklage, Hochrechnung und Vorjahresvergleich.
+    fn prognose_card(&self, heute: &str) -> String {
+        let d = &self.data;
+        let jahr = self.ui.jahr;
+        let p = report::prognose(d, heute, jahr);
+        let ku = d.firma.kleinunternehmer;
+        let mut h = String::from("<div class=\"card insight\"><div class=\"card-head\"><h2>Rücklage &amp; Prognose</h2><span class=\"muted small\">grobe Schätzung – ersetzt keine Steuerberatung</span></div><div class=\"ins-grid\">");
+        // Rücklage
+        let mut zeilen = String::new();
+        if !ku {
+            let _ = write!(zeilen, "<li><span>USt.-Zahllast Q{}</span><b>{}</b></li>", p.quartal, esc(&fmt_eur(p.ust_quartal)));
+        }
+        let _ = write!(
+            zeilen,
+            "<li><span>Einkommensteuer ≈ {} % vom Gewinn</span><b>{}</b></li>",
+            fmt_qty(d.firma.ruecklage_prozent),
+            esc(&fmt_eur(p.est))
+        );
+        let _ = write!(
+            h,
+            "<div class=\"ins ins-main\"><span class=\"ins-l\">{} Zurücklegen</span><b class=\"ins-v\">{}</b><ul>{zeilen}</ul><a href=\"#\" class=\"small\" data-act=\"zeit-satz\">Prozentsatz anpassen</a></div>",
+            ic("landmark"),
+            esc(&fmt_eur(p.ruecklage))
+        );
+        // Hochrechnung
+        match (p.jahr_einnahmen, p.jahr_gewinn) {
+            (Some(e), Some(g)) => {
+                let _ = write!(
+                    h,
+                    "<div class=\"ins\"><span class=\"ins-l\">{} Hochrechnung {jahr}</span><b class=\"ins-v\">{}</b><ul><li><span>Einnahmen bis 31.12. (netto)</span></li><li><span>Gewinn voraussichtlich</span><b class=\"{}\">{}</b></li></ul></div>",
+                    ic("arrow"),
+                    esc(&fmt_eur(e)),
+                    if g < 0 { "neg" } else { "plus" },
+                    esc(&fmt_eur(g))
+                );
+            }
+            _ => {
+                let a = report::auswertung(d, jahr);
+                let _ = write!(
+                    h,
+                    "<div class=\"ins\"><span class=\"ins-l\">{} Jahresergebnis {jahr}</span><b class=\"ins-v\">{}</b><ul><li><span>Gewinn (netto)</span></li></ul></div>",
+                    ic("wallet"),
+                    esc(&fmt_eur(a.gewinn()))
+                );
+            }
+        }
+        // Vergleich bzw. Kleinunternehmergrenze
+        if ku {
+            let a = report::auswertung(d, jahr);
+            let umsatz = a.ein.brutto;
+            let pct = (umsatz as f64 / report::KU_GRENZE_VORJAHR as f64 * 100.0).min(100.0);
+            let _ = write!(
+                h,
+                "<div class=\"ins\"><span class=\"ins-l\">{} Kleinunternehmergrenze</span><b class=\"ins-v\">{:.0} %</b><div class=\"bar\"><i style=\"width:{pct:.1}%\"></i></div><ul><li><span>{} von 25.000 € (fürs Folgejahr)</span></li><li><span>Höchstens 100.000 € im laufenden Jahr</span></li></ul></div>",
+                ic("alert"),
+                pct,
+                esc(&fmt_eur(umsatz))
+            );
+        } else if let (Some(vj), Some(v)) = (p.vorjahr_bis, p.veraenderung) {
+            let _ = write!(
+                h,
+                "<div class=\"ins\"><span class=\"ins-l\">{} Vergleich mit {}</span><b class=\"ins-v {}\">{}{:.0} %</b><ul><li><span>Einnahmen {} bis {}: {}</span></li></ul></div>",
+                ic("in"),
+                jahr - 1,
+                if v < 0.0 { "neg" } else { "plus" },
+                if v >= 0.0 { "+" } else { "" },
+                v,
+                jahr - 1,
+                if date::year(heute) == Some(jahr) { MONTHS[(date::month(heute).unwrap_or(12) as usize).clamp(1, 12) - 1] } else { "Dezember" },
+                esc(&fmt_eur(vj))
+            );
+        } else {
+            let _ = write!(h, "<div class=\"ins\"><span class=\"ins-l\">{} Vergleich mit {}</span><b class=\"ins-v muted\">–</b><ul><li><span>Noch keine Einnahmen im Vorjahr erfasst</span></li></ul></div>", ic("in"), jahr - 1);
+        }
+        h += "</div></div>";
+        h
+    }
+
     pub fn buch_list_html(&self) -> String {
         let d = &self.data;
         let q = self.ui.buch_q.trim().to_lowercase();
@@ -1244,6 +1324,7 @@ impl App {
             h += &kpi("landmark", "USt.-Zahllast", &fmt_eur(a.zahllast()), &format!("USt. {} − VSt. {}", esc(&fmt_eur(a.ein.steuer)), esc(&fmt_eur(a.aus.steuer))), "", "");
         }
         h += "</section>";
+        h += &self.prognose_card(&heute);
 
         h += "<section class=\"grid2\">";
         let _ = write!(

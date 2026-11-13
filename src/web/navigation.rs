@@ -120,13 +120,21 @@ impl App {
             Some(u) => format!("<img class=\"brand-logo\" src=\"{}\" alt=\"\">", esc(u)),
             None => format!("<div class=\"brand-mark\">{}</div>", ic("logo")),
         };
-        let mut h = format!("<div class=\"brand\">{logo}<span>{}</span></div><div class=\"nav-list\">", esc(&firm));
+        let mut h = format!(
+            "<div class=\"brand\">{logo}<span>{}</span></div><button class=\"nav-search\" data-act=\"suche\" title=\"Suchen (Strg+K)\">{}<span>Suchen …</span><kbd>Strg K</kbd></button><div class=\"nav-list\">",
+            esc(&firm),
+            ic("search")
+        );
         for key in self.nav_reihenfolge() {
             if !self.nav_sichtbar(key) {
                 continue;
             }
             let n = NAV.iter().find(|n| n.0 == key).unwrap();
-            h += &item(n.0, n.1, n.2, self.nav_zahl(key));
+            let mut it = item(n.0, n.1, n.2, self.nav_zahl(key));
+            if key == "auftraege" && self.data.laufende_uhr().is_some() {
+                it = it.replacen("</span>", "</span><i class=\"live\" title=\"Stoppuhr läuft\"></i>", 1);
+            }
+            h += &it;
         }
         h += "</div><div class=\"nav-space\"></div>";
         let _ = write!(

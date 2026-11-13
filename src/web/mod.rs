@@ -7,13 +7,16 @@
 
 mod ablauf;
 mod actions;
+mod heute;
 mod dnd;
 mod kalender;
 mod navigation;
 mod settings;
 mod signature;
 mod storage;
+mod suche;
 mod views;
+mod zeiten;
 
 use crate::engine::{DokArt, Id};
 use std::cell::RefCell;
@@ -474,6 +477,23 @@ pub fn start() {
     });
     on(&d, "keydown", |ev: Event| {
         let Some(k) = ev.dyn_ref::<web_sys::KeyboardEvent>() else { return };
+        let taste = k.key();
+        // Suche: Strg/Cmd+K überall, „/“ außerhalb von Eingabefeldern
+        let im_feld = ev
+            .target()
+            .and_then(|t| t.dyn_into::<Element>().ok())
+            .map(|e| matches!(e.tag_name().as_str(), "INPUT" | "TEXTAREA" | "SELECT"))
+            .unwrap_or(false);
+        if ((k.ctrl_key() || k.meta_key()) && taste.eq_ignore_ascii_case("k")) || (taste == "/" && !im_feld && !is_modal_open()) {
+            ev.prevent_default();
+            with_app(|a| a.suche_oeffnen());
+            return;
+        }
+        if el("suche-list").is_some() && matches!(taste.as_str(), "ArrowDown" | "ArrowUp" | "Enter") {
+            ev.prevent_default();
+            with_app(|a| a.suche_taste(&taste));
+            return;
+        }
         if k.key() == "Escape" {
             with_app(|a| a.close_modal());
         } else if k.key() == "Enter" && is_modal_open() {
@@ -498,6 +518,7 @@ pub fn start() {
     storage::bind_files();
     signature::bind();
     dnd::bind();
+    zeiten::bind();
     storage::init_storage();
     storage::register_service_worker();
     with_app(|a| a.render());

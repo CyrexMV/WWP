@@ -163,6 +163,11 @@ impl App {
                 save_file(json.as_bytes(), "application/json", &name);
             }
         });
+        self.data.letztes_backup = today();
+        self.changed();
+        if self.view() == super::View::Start {
+            self.render();
+        }
     }
 
     fn ask_restore(&mut self, text: String) {

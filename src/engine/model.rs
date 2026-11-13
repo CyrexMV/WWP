@@ -33,6 +33,10 @@ pub struct Firma {
     /// Kleinunternehmerregelung (§ 19 UStG): keine Umsatzsteuer auf Rechnungen.
     pub kleinunternehmer: bool,
     pub ust_standard: u8,
+    /// Stundensatz (netto) für die Zeiterfassung
+    pub stundensatz: Cents,
+    /// Rücklage für Einkommensteuer in Prozent vom Gewinn (grobe Schätzung)
+    pub ruecklage_prozent: f64,
     pub zahlungsziel: u32,
     pub angebot_gueltig: u32,
     pub prefix_angebot: String,
@@ -105,6 +109,8 @@ impl Default for Firma {
             bic: String::new(),
             kleinunternehmer: false,
             ust_standard: 19,
+            stundensatz: 0,
+            ruecklage_prozent: 30.0,
             zahlungsziel: 14,
             angebot_gueltig: 30,
             prefix_angebot: "AN".into(),
@@ -345,6 +351,10 @@ pub struct Auftrag {
     pub wert: Cents,
     pub notizen: String,
     pub verlauf: Vec<Verlauf>,
+    /// erfasste Arbeitszeiten
+    pub zeiten: Vec<super::zeit::Zeit>,
+    /// laufende Stoppuhr: Startzeit in Millisekunden seit 1970
+    pub uhr_start: Option<f64>,
 }
 
 impl Auftrag {
@@ -1098,6 +1108,8 @@ pub struct Data {
     pub nav_reihenfolge: Vec<String>,
     /// ausgeblendete Menüpunkte
     pub nav_aus: Vec<String>,
+    /// Datum des letzten gespeicherten Backups
+    pub letztes_backup: String,
     /// weggeklickte Hinweise (z. B. „So funktioniert der Ablauf“)
     pub tipps_aus: Vec<String>,
     /// Nummernkreise: „RE-2026“ → zuletzt vergebene Nummer

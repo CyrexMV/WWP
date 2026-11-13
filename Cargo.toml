@@ -23,7 +23,8 @@ js-sys = "0.3"
 [target.'cfg(target_arch = "wasm32")'.dependencies.web-sys]
 version = "0.3"
 features = [
-  "Window", "Document", "Element", "HtmlElement", "Node", "EventTarget", "Event",
+  "Window", "Document", "Element", "HtmlElement", "Node", "NodeList", "EventTarget", "Event",
+  "ScrollIntoViewOptions", "ScrollLogicalPosition",
   "MouseEvent", "KeyboardEvent", "HtmlInputElement", "HtmlSelectElement", "HtmlTextAreaElement",
   "HtmlAnchorElement", "Blob", "BlobPropertyBag", "File", "FileList", "Url", "Storage",
   "Navigator", "ServiceWorkerContainer", "IdbFactory", "IdbDatabase", "IdbOpenDbRequest",

@@ -1,5 +1,6 @@
 //! Geschäftslogik ohne Browser-Abhängigkeiten.
 
+pub mod aufgaben;
 pub mod backup;
 pub mod date;
 pub mod erechnung;
@@ -13,6 +14,7 @@ pub mod pdfa;
 pub mod report;
 pub mod termine;
 pub mod ttf;
+pub mod zeit;
 
 pub use model::*;
 pub use money::Cents;

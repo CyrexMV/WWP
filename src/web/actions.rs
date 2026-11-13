@@ -145,7 +145,7 @@ impl App {
     // -----------------------------------------------------------------------
 
     pub fn action(&mut self, act: &str, id: Option<Id>, v: &str) {
-        if self.settings_action(act, v) || self.nav_action(act, v) {
+        if self.settings_action(act, v) || self.nav_action(act, v) || self.zeit_action(act, id, v) || self.suche_action(act, id, v) {
             return;
         }
         let heute = today();
@@ -743,6 +743,10 @@ impl App {
                 self.changed();
                 self.render();
             }
+            "heute-belege" => {
+                self.ui.buch_filter = "ohnebeleg".into();
+                self.go_root(View::Finanzen);
+            }
             "buch-filter" => {
                 self.ui.buch_filter = v.to_string();
                 if self.view() != View::Finanzen {
@@ -908,6 +912,7 @@ impl App {
                 set_html("list", &self.buch_list_html());
             }
             "katalog" => set_html("kat-list", &self.katalog_liste(v)),
+            "suche" => self.suche_tippen(v),
             "pay-skonto" => {
                 // Betrag passend zum Skonto-Schalter vorschlagen
                 let View::Dokument(id) = self.view() else { return };
@@ -940,6 +945,10 @@ impl App {
         let (scope, rest) = key.split_once('.').unwrap_or((key, ""));
         let view = self.view();
         match (scope, view) {
+            ("z", View::Auftrag(_)) => {
+                self.zeit_feld(rest, v);
+                return;
+            }
             ("ui", _) => {
                 match rest {
                     "jahr" => {
@@ -1071,6 +1080,8 @@ impl App {
                     }
                     "ust_standard" => f.ust_standard = v.parse().unwrap_or(19),
                     "zahlungsziel" => f.zahlungsziel = v.trim().parse().unwrap_or(f.zahlungsziel),
+                    "stundensatz" => f.stundensatz = parse_amount(v).unwrap_or(0).max(0),
+                    "ruecklage_prozent" => f.ruecklage_prozent = parse_decimal(v).unwrap_or(0.0).clamp(0.0, 100.0),
                     "angebot_gueltig" => f.angebot_gueltig = v.trim().parse().unwrap_or(f.angebot_gueltig),
                     "prefix_angebot" => f.prefix_angebot = s.trim().to_string(),
                     "prefix_rechnung" => f.prefix_rechnung = s.trim().to_string(),

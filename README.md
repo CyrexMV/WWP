@@ -12,10 +12,19 @@ Kunden, Aufträge, Angebote, Rechnungen und Finanzen an einem Ort – **komplett
 
 ## Funktionen
 
+**Assistent & Suche**
+- **Heute zu tun** auf der Übersicht: überfällige Rechnungen und Mahnungen, Angebote zum Nachfassen (7 Tage ohne
+  Antwort), abgelaufene Angebote, Termine heute/morgen, Fristen, neue Anfragen, nicht abgerechnete Arbeitszeit,
+  Ausgaben ohne Beleg und Backup-Erinnerung (alle 14 Tage) – jeweils mit direktem Knopf
+- **Globale Suche & Schnellbefehle** (Strg+K, „/“ oder Lupe): Kunden, Aufträge, Dokumente (auch nach Betrag),
+  Buchungen, Termine, Leistungen und Befehle wie „Neue Rechnung“ in einem Feld, mit Pfeiltasten bedienbar
+
 **Kunden- und Auftragsverwaltung (CRM)**
 - Kunden mit Kundennummer (K-1001 …), Anschrift, Ansprechpartner, E-Mail, Telefon, USt-IdNr., Notizen
 - Suche, Umsatz (bezahlt) und offene Beträge je Kunde, alle Aufträge und Dokumente des Kunden auf einen Blick
 - Direkt aus dem Kunden: E-Mail schreiben, anrufen, Anfrage/Angebot/Rechnung anlegen
+- **Zeiterfassung pro Auftrag**: Stoppuhr (läuft auch im Hintergrund weiter), Zeiten nachtragen („1:30“, „1,5“),
+  Tätigkeit je Eintrag; mit einem Tipp als Positionen (Std. × Stundensatz) in die Rechnung übernehmen
 - **Auftrags-Board** von der Anfrage bis zur Abrechnung: *Anfrage → Angebot gesendet → Beauftragt → In Arbeit →
   Erledigt → Abgerechnet* (plus *Abgelehnt*), mit Termin, geschätztem Wert und „Weiter“-Knopf auf jeder Karte
 - Verlauf je Auftrag (Statuswechsel und eigene Notizen mit Datum)
@@ -83,6 +92,8 @@ Kunden, Aufträge, Angebote, Rechnungen und Finanzen an einem Ort – **komplett
 
 **Daten**
 - Alles wird automatisch gespeichert – nur auf dem Gerät (IndexedDB), ohne Konto und ohne Cloud
+- **Rücklage & Prognose**: empfohlene Steuerrücklage (USt.-Zahllast des Quartals + einstellbarer Anteil vom
+  Gewinn), Hochrechnung aufs Jahresende, Vergleich mit dem Vorjahr bzw. Kleinunternehmergrenze
 - **Komplett-Backup** (inkl. Logo und Belege) als eine `.wwpbackup`-Datei speichern oder teilen
   (z. B. in Google Drive) und wiederherstellen
 - Beispieldaten zum Ausprobieren (Startbildschirm oder Einstellungen)
@@ -152,6 +163,9 @@ src/web/      Oberfläche (wasm-bindgen / web-sys)
   settings.rs   Einstellungen mit Bereichen und Live-Vorschau
   kalender.rs   Wochen-/Monatsansicht, Termin-Dialog
   dnd.rs        Listen per Ziehen umsortieren (Positionen, Seitenleiste)
+  suche.rs      globale Suche und Schnellbefehle
+  heute.rs      „Heute zu tun“ auf der Übersicht
+  zeiten.rs     Zeiterfassung im Auftrag (Stoppuhr)
   ablauf.rs     Schrittleiste Angebot → Bestätigung → Rechnung
   navigation.rs Seitenleiste: Menüpunkte, anpassbare Reihenfolge und Sichtbarkeit
 assets/fonts/ eingebettete Schriften (Liberation Sans, WinAnsi-Teilmenge) mit Lizenz

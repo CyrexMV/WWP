@@ -199,6 +199,61 @@ pub fn csv_rechnungen(d: &Data, jahr: Option<i32>) -> String {
     out
 }
 
+/// Kleinunternehmer-Grenzen (§ 19 UStG, ab 2025): Vorjahr höchstens 25.000 €, laufendes Jahr höchstens 100.000 €.
+pub const KU_GRENZE_VORJAHR: Cents = 2_500_000;
+pub const KU_GRENZE_LAUFEND: Cents = 10_000_000;
+
+/// Steuerrücklage und Hochrechnung für ein Jahr (grobe Schätzung, keine Steuerberatung).
+#[derive(Debug, Default, Clone, PartialEq)]
+pub struct Prognose {
+    /// laufendes Quartal (1–4) und dessen Umsatzsteuer-Zahllast
+    pub quartal: usize,
+    pub ust_quartal: Cents,
+    /// Einkommensteuer-Anteil vom bisherigen Gewinn
+    pub est: Cents,
+    pub ruecklage: Cents,
+    /// Hochrechnung aufs ganze Jahr (nur laufendes Jahr)
+    pub jahr_einnahmen: Option<Cents>,
+    pub jahr_gewinn: Option<Cents>,
+    /// Einnahmen des Vorjahres bis zum gleichen Monat und Veränderung in Prozent
+    pub vorjahr_bis: Option<Cents>,
+    pub veraenderung: Option<f64>,
+}
+
+pub fn prognose(d: &Data, heute: &str, jahr: i32) -> Prognose {
+    let a = auswertung(d, jahr);
+    let laufend = date::year(heute) == Some(jahr);
+    let monat = if laufend { date::month(heute).unwrap_or(12).clamp(1, 12) as usize } else { 12 };
+    let quartal = (monat - 1) / 3 + 1;
+    let ust_quartal = if d.firma.kleinunternehmer {
+        0
+    } else {
+        let (u, v) = a.quartal(quartal);
+        (u - v).max(0)
+    };
+    let est = ((a.gewinn().max(0) as f64) * d.firma.ruecklage_prozent.clamp(0.0, 100.0) / 100.0).round() as Cents;
+    let mut p = Prognose { quartal, ust_quartal, est, ruecklage: ust_quartal + est, ..Default::default() };
+    if laufend {
+        let start = date::iso(jahr, 1, 1);
+        let ende = date::iso(jahr, 12, 31);
+        let tag = date::diff_days(&start, heute).unwrap_or(0) + 1;
+        let tage = date::diff_days(&start, &ende).unwrap_or(364) + 1;
+        if tag >= 14 {
+            let f = tage as f64 / tag as f64;
+            p.jahr_einnahmen = Some((a.ein.netto as f64 * f).round() as Cents);
+            p.jahr_gewinn = Some((a.gewinn() as f64 * f).round() as Cents);
+        }
+    }
+    let vj = auswertung(d, jahr - 1);
+    let vj_bis: Cents = vj.monate[..monat].iter().map(|m| m.ein.netto).sum();
+    let bis: Cents = a.monate[..monat].iter().map(|m| m.ein.netto).sum();
+    if vj_bis > 0 {
+        p.vorjahr_bis = Some(vj_bis);
+        p.veraenderung = Some((bis - vj_bis) as f64 / vj_bis as f64 * 100.0);
+    }
+    p
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -236,5 +291,30 @@ mod tests {
         assert!(csv.contains("10.02.2026;Einnahme;Umsatzerlöse;;;Überweisung;100,00;19 %;19,00;119,00"));
         assert!(csv.contains("-500,00"));
         assert_eq!(csv.lines().count(), 4);
+    }
+
+    #[test]
+    fn ruecklage_und_hochrechnung() {
+        let mut d = Data::new();
+        d.firma.ruecklage_prozent = 30.0;
+        for (datum, art, brutto) in [("2026-02-10", BuchArt::Einnahme, 119_000), ("2026-05-10", BuchArt::Ausgabe, 11_900), ("2025-03-01", BuchArt::Einnahme, 59_500)] {
+            let id = d.neue_buchung(art, datum);
+            let b = d.buchungen.iter_mut().find(|b| b.id == id).unwrap();
+            b.brutto = brutto;
+            b.ust = 19;
+            b.kategorie = if art == BuchArt::Einnahme { "Umsatzerlöse".into() } else { "Material/Waren".into() };
+        }
+        let p = prognose(&d, "2026-07-01", 2026);
+        assert_eq!(p.quartal, 3);
+        assert_eq!(p.ust_quartal, 0);
+        // Gewinn 1.000 − 100 = 900 € → 30 % = 270 €
+        assert_eq!(p.est, 27_000);
+        assert_eq!(p.ruecklage, 27_000);
+        // 1. Juli = Tag 182 von 365 → Einnahmen ×365/182
+        assert_eq!(p.jahr_einnahmen, Some((100_000.0f64 * 365.0 / 182.0).round() as Cents));
+        assert_eq!(p.vorjahr_bis, Some(50_000));
+        assert_eq!(p.veraenderung, Some(100.0));
+        // abgeschlossenes Jahr: keine Hochrechnung
+        assert!(prognose(&d, "2027-03-01", 2026).jahr_einnahmen.is_none());
     }
 }

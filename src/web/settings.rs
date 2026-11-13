@@ -303,6 +303,20 @@ impl App {
         }
         h += &group("Steuern", "", &steuer);
         h += &group(
+            "Zeiterfassung & Rücklage",
+            "Stundensatz für die Stoppuhr im Auftrag und die geschätzte Steuerrücklage in den Finanzen.",
+            &format!(
+                "<div class=\"form\">{}{}</div>",
+                money_f("Stundensatz (netto)", "f.stundensatz", f.stundensatz, "placeholder=\"z. B. 65,00\""),
+                text(
+                    "Rücklage Einkommensteuer (% vom Gewinn)",
+                    "f.ruecklage_prozent",
+                    &crate::engine::money::fmt_qty(f.ruecklage_prozent),
+                    "inputmode=\"decimal\""
+                )
+            ),
+        );
+        h += &group(
             "Bezahlen & E-Rechnung",
             "",
             &format!(
