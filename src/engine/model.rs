@@ -1092,6 +1092,10 @@ pub struct Data {
     pub katalog: Vec<Leistung>,
     pub dateien: Vec<Datei>,
     pub termine: Vec<super::termine::Termin>,
+    /// Reihenfolge der Seitenleiste (Schlüssel der Menüpunkte)
+    pub nav_reihenfolge: Vec<String>,
+    /// ausgeblendete Menüpunkte
+    pub nav_aus: Vec<String>,
     /// Nummernkreise: „RE-2026“ → zuletzt vergebene Nummer
     pub zaehler: BTreeMap<String, u32>,
     pub next_id: Id,

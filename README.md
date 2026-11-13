@@ -70,6 +70,13 @@ Kunden, Aufträge, Angebote, Rechnungen und Finanzen an einem Ort – **komplett
   und **PDF-Jahresübersicht**
 - Privatentnahmen, Steuerzahlungen ans Finanzamt u. Ä. sind „gewinnneutral“ und verfälschen den Gewinn nicht
 
+**Bedienung**
+- Seitenleiste mit eigenem Menüpunkt für jeden Bereich: Übersicht, Kunden, Aufträge, Kalender, Angebote,
+  Auftragsbestätigungen, Lieferscheine, Rechnungen, Mahnwesen, Finanzen, Leistungskatalog
+- Reihenfolge der Seitenleiste selbst festlegen (am Griff ziehen oder Pfeile) und Menüpunkte ausblenden –
+  über das Griff-Symbol neben „Einstellungen“ oder Einstellungen → Darstellung
+- Mahnwesen-Seite mit allen überfälligen Rechnungen, nächster Mahnstufe und Verlauf aller Mahnungen
+
 **Daten**
 - Alles wird automatisch gespeichert – nur auf dem Gerät (IndexedDB), ohne Konto und ohne Cloud
 - **Komplett-Backup** (inkl. Logo und Belege) als eine `.wwpbackup`-Datei speichern oder teilen
@@ -140,7 +147,8 @@ src/web/      Oberfläche (wasm-bindgen / web-sys)
   signature.rs  Unterschriftenfeld (S-Pen, Druck, Handballen-Filter)
   settings.rs   Einstellungen mit Bereichen und Live-Vorschau
   kalender.rs   Wochen-/Monatsansicht, Termin-Dialog
-  dnd.rs        Positionen per Ziehen umsortieren
+  dnd.rs        Listen per Ziehen umsortieren (Positionen, Seitenleiste)
+  navigation.rs Seitenleiste: Menüpunkte, anpassbare Reihenfolge und Sichtbarkeit
 assets/fonts/ eingebettete Schriften (Liberation Sans, WinAnsi-Teilmenge) mit Lizenz
 web/          index.html, style.css, Manifest, Icons, Service Worker
 android/      Android-Hülle (WebView) mit Brücke für Speichern, PDF öffnen, E-Mail/Teilen und Kamera

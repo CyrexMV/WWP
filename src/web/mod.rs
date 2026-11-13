@@ -8,6 +8,7 @@
 mod actions;
 mod dnd;
 mod kalender;
+mod navigation;
 mod settings;
 mod signature;
 mod storage;
@@ -49,6 +50,8 @@ pub enum View {
     Finanzen,
     Buchung(Id),
     Kalender,
+    Mahnwesen,
+    Katalog,
     Einstellungen,
 }
 
@@ -72,6 +75,8 @@ pub struct Ui {
     /// Kalender: angezeigter Tag und Ansicht („woche“/„monat“)
     pub kal_tag: String,
     pub kal_ansicht: String,
+    /// Rechnung, deren Mahnungs-Dialog offen ist
+    pub mahn_dok: Option<Id>,
 }
 
 /// Aktion, die nach „Ja“ in einer Sicherheitsabfrage ausgeführt wird.

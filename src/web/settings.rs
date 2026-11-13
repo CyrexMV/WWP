@@ -15,8 +15,7 @@ pub const SECTIONS: &[(&str, &str, &str, &str)] = &[
     ("nummern", "hash", "Nummern & Fristen", "Präfixe, Zahlungsziel"),
     ("mahnung", "bell", "Mahnwesen", "Stufen, Gebühren, Zinsen"),
     ("texte", "type", "Texte & E-Mails", "Vorlagen für Angebote und Rechnungen"),
-    ("katalog", "book", "Leistungskatalog", "Häufige Positionen"),
-    ("darstellung", "moon", "Darstellung", "Hell, dunkel oder automatisch"),
+    ("darstellung", "moon", "Darstellung", "Farbschema und Seitenleiste"),
     ("daten", "database", "Daten & Backup", "Sichern und wiederherstellen"),
 ];
 
@@ -116,7 +115,8 @@ impl App {
         let mut missing = String::new();
         for (ok, l, sec) in &list {
             if !ok {
-                let _ = write!(missing, "<button class=\"miss\" data-act=\"set-tab\" data-v=\"{sec}\">{}{l}</button>", ic("plus"));
+                let act = if *sec == "katalog" { "nav" } else { "set-tab" };
+                let _ = write!(missing, "<button class=\"miss\" data-act=\"{act}\" data-v=\"{sec}\">{}{l}</button>", ic("plus"));
             }
         }
         let status = if done == list.len() {
@@ -228,7 +228,6 @@ impl App {
             "nummern" => self.sec_nummern(),
             "mahnung" => self.sec_mahnung(),
             "texte" => self.sec_texte(),
-            "katalog" => self.sec_katalog(),
             "darstellung" => self.sec_darstellung(),
             "daten" => self.sec_daten(),
             _ => self.sec_firma(),
@@ -508,7 +507,7 @@ impl App {
         h
     }
 
-    fn sec_katalog(&self) -> String {
+    pub(super) fn sec_katalog(&self) -> String {
         let add = btn("kat-add", "plus", "Leistung", "primary sm", None, "");
         if self.data.katalog.is_empty() {
             return group_with(
@@ -567,7 +566,13 @@ impl App {
             );
         }
         h += "</div>";
-        group("Farbschema", "", &h)
+        let mut out = group("Farbschema", "", &h);
+        out += &group(
+            "Seitenleiste",
+            "Reihenfolge am Griff ziehen oder mit den Pfeilen ändern; mit dem Schalter Menüpunkte ein- und ausblenden.",
+            &self.nav_einstellungen_html(),
+        );
+        out
     }
 
     fn sec_daten(&self) -> String {

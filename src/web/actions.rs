@@ -145,7 +145,7 @@ impl App {
     // -----------------------------------------------------------------------
 
     pub fn action(&mut self, act: &str, id: Option<Id>, v: &str) {
-        if self.settings_action(act, v) {
+        if self.settings_action(act, v) || self.nav_action(act, v) {
             return;
         }
         let heute = today();
@@ -153,16 +153,7 @@ impl App {
         match act {
             "nav" => {
                 self.close_modal();
-                let target = match v {
-                    "kunden" => View::Kunden(None),
-                    "auftraege" => View::Auftraege,
-                    "angebote" => View::Dokumente(DokArt::Angebot),
-                    "rechnungen" => View::Dokumente(DokArt::Rechnung),
-                    "finanzen" => View::Finanzen,
-                    "kalender" => View::Kalender,
-                    "einstellungen" => View::Einstellungen,
-                    _ => View::Start,
-                };
+                let target = super::navigation::ziel(v);
                 if let View::Dokumente(_) = target {
                     if self.view() != target {
                         self.ui.dok_filter.clear();
@@ -922,7 +913,7 @@ impl App {
                 }
             }
             "mahn-stufe" => {
-                if let View::Dokument(id) = self.view() {
+                if let Some(id) = self.ui.mahn_dok {
                     self.mahn_modal(id, v.parse().unwrap_or(0));
                 }
             }
@@ -1142,7 +1133,11 @@ impl App {
                 }
                 self.settings_refresh();
             }
-            ("l", View::Einstellungen) => {
+            ("nav", View::Einstellungen) => {
+                self.nav_sichtbarkeit(rest, checked);
+                return;
+            }
+            ("l", View::Einstellungen | View::Katalog) => {
                 let mut it = rest.splitn(2, '.');
                 let (Some(i), Some(fld)) = (it.next().and_then(|i| i.parse::<usize>().ok()), it.next()) else { return };
                 let Some(l) = self.data.katalog.get_mut(i) else { return };

@@ -157,57 +157,12 @@ impl App {
             View::Dokument(id) => self.dokument_html(id),
             View::Finanzen => self.finanzen_html(),
             View::Kalender => self.kalender_html(),
+            View::Mahnwesen => self.mahnwesen_html(),
+            View::Katalog => self.katalog_html(),
             View::Buchung(id) => self.buchung_html(id),
             View::Einstellungen => self.settings_html(),
         };
         set_html("main", &html);
-    }
-
-    pub fn nav_html(&self) -> String {
-        let heute = today();
-        let overdue = self.data.dokumente.iter().filter(|d| d.ueberfaellig(&heute)).count();
-        let anfragen = self.data.auftraege.iter().filter(|a| a.status == AuftragStatus::Anfrage).count();
-        let cur = match self.stack.iter().rev().find(|v| !matches!(v, View::Start)).copied().unwrap_or(View::Start) {
-            _ if self.view() == View::Start => "start",
-            View::Kunden(_) => "kunden",
-            View::Auftraege | View::Auftrag(_) => "auftraege",
-            View::Dokumente(DokArt::Rechnung) => "rechnungen",
-            View::Dokumente(_) => "angebote",
-            View::Dokument(id) => match self.data.dokument(Some(id)).map(|d| d.art) {
-                Some(DokArt::Rechnung) | None => "rechnungen",
-                _ => "angebote",
-            },
-            View::Finanzen | View::Buchung(_) => "finanzen",
-            View::Kalender => "kalender",
-            View::Einstellungen => "einstellungen",
-            View::Start => "start",
-        };
-        let item = |key: &str, icon: &str, label: &str, count: usize, alert: bool| {
-            let b = if count > 0 { format!("<em class=\"{}\">{}</em>", if alert { "alert" } else { "" }, count) } else { String::new() };
-            format!(
-                "<button class=\"nav-item{}\" data-act=\"nav\" data-v=\"{key}\">{}<span>{}</span>{b}</button>",
-                if cur == key { " active" } else { "" },
-                ic(icon),
-                esc(label)
-            )
-        };
-        let firm = if self.data.firma.name.trim().is_empty() { "WWP Büro".to_string() } else { self.data.firma.name.trim().to_string() };
-        let logo = match &self.logo_url {
-            Some(u) => format!("<img class=\"brand-logo\" src=\"{}\" alt=\"\">", esc(u)),
-            None => format!("<div class=\"brand-mark\">{}</div>", ic("logo")),
-        };
-        format!(
-            "<div class=\"brand\">{logo}<span>{}</span></div>{}{}{}{}{}{}{}<div class=\"nav-space\"></div>{}<p class=\"save-state\" id=\"save-state\">Gespeichert</p>",
-            esc(&firm),
-            item("start", "home", "Übersicht", 0, false),
-            item("kunden", "users", "Kunden", 0, false),
-            item("auftraege", "briefcase", "Aufträge", anfragen, false),
-            item("kalender", "calendar", "Kalender", self.data.termine_am(&heute).len(), false),
-            item("angebote", "file", "Angebote", 0, false),
-            item("rechnungen", "receipt", "Rechnungen", overdue, true),
-            item("finanzen", "wallet", "Finanzen", 0, false),
-            item("einstellungen", "settings", "Einstellungen", 0, false),
-        )
     }
 
     // -----------------------------------------------------------------------
@@ -782,20 +737,6 @@ impl App {
         let mut h = String::new();
         let n = self.data.dokumente.iter().filter(|x| x.art == art).count();
         h += &head(art.plural(), &format!("{n} insgesamt"), &btn("dok-neu", "plus", art.neu_label(), "primary", None, art.key()), false);
-        if art != DokArt::Rechnung {
-            h += "<div class=\"segmented doc-tabs\">";
-            for a in [DokArt::Angebot, DokArt::Auftragsbestaetigung, DokArt::Lieferschein] {
-                let anzahl = self.data.dokumente.iter().filter(|x| x.art == a).count();
-                let _ = write!(
-                    h,
-                    "<button class=\"{}\" data-act=\"dok-tab\" data-v=\"{}\">{} <em>{anzahl}</em></button>",
-                    if a == art { "active" } else { "" },
-                    a.key(),
-                    a.plural()
-                );
-            }
-            h += "</div>";
-        }
         if n == 0 {
             h += &empty(
                 if art == DokArt::Rechnung { "receipt" } else { "file" },
@@ -1024,7 +965,7 @@ impl App {
             };
             let _ = write!(
                 h,
-                "<div class=\"pos art-{}\" data-i=\"{i}\">{griff}<div class=\"pos-body\">{tools}{inhalt}</div></div>",
+                "<div class=\"pos art-{}\" data-drag-row=\"pos\" data-i=\"{i}\">{griff}<div class=\"pos-body\">{tools}{inhalt}</div></div>",
                 p.art.key()
             );
         }
@@ -1460,6 +1401,88 @@ impl App {
     }
 
     // -----------------------------------------------------------------------
+    // Mahnwesen und Leistungskatalog
+    // -----------------------------------------------------------------------
+
+    fn mahnwesen_html(&self) -> String {
+        let heute = today();
+        let d = &self.data;
+        let offen: Vec<&Dokument> = d.dokumente.iter().filter(|x| x.offen() && x.storno_von.is_none()).collect();
+        let zu: Vec<&&Dokument> = offen.iter().filter(|x| x.zu_mahnen(&heute)).collect();
+        let gemahnt: Vec<&&Dokument> = offen.iter().filter(|x| !x.mahnungen.is_empty()).collect();
+        let ueber: Vec<&&Dokument> = offen.iter().filter(|x| x.ueberfaellig(&heute)).collect();
+        let mut h = head("Mahnwesen", "Überfällige Rechnungen im Blick behalten und mahnen", &btn("set-tab", "settings", "Stufen & Texte", "ghost", None, "mahnung"), false);
+        h += "<section class=\"kpis\">";
+        h += &kpi("Zu mahnen", &zu.len().to_string(), &esc(&fmt_eur(zu.iter().map(|x| x.rest()).sum())), if zu.is_empty() { "" } else { "warn" }, "");
+        h += &kpi("Überfällig", &ueber.len().to_string(), &esc(&fmt_eur(ueber.iter().map(|x| x.rest()).sum())), "", "");
+        h += &kpi("Bereits gemahnt", &gemahnt.len().to_string(), "offene Rechnungen mit Mahnung", "", "");
+        h += &kpi("Offene Mahnkosten", &fmt_eur(gemahnt.iter().map(|x| x.mahnkosten()).sum()), "Gebühren und Zinsen", "", "");
+        h += "</section>";
+        let mut liste: Vec<&&Dokument> = ueber.clone();
+        liste.sort_by(|a, b| (!a.zu_mahnen(&heute), a.faellig.as_str()).cmp(&(!b.zu_mahnen(&heute), b.faellig.as_str())));
+        h += "<div class=\"card flush\"><div class=\"card-head\"><h2>Überfällige Rechnungen</h2></div>";
+        if liste.is_empty() {
+            h += "<p class=\"muted pad\">Keine überfälligen Rechnungen. 🎉</p>";
+        } else {
+            h += "<table class=\"tbl\"><thead><tr><th>Rechnung</th><th>Kunde</th><th>Fällig seit</th><th>Stufe</th><th class=\"r\">Offen</th><th></th></tr></thead><tbody>";
+            for x in liste {
+                let tage = date::diff_days(&x.faellig, &heute).unwrap_or(0);
+                let stufe = x.letzte_mahnung().map(|m| format!("{} · Frist {}", m.label(), german(&m.frist))).unwrap_or_else(|| "–".into());
+                let aktion = if x.zu_mahnen(&heute) {
+                    let label = format!("{} erstellen", MAHNSTUFEN[x.naechste_stufe() as usize]);
+                    btn("mahn-new", "bell", &label, "warn sm", Some(x.id), "")
+                } else {
+                    "<span class=\"muted small\">Frist läuft</span>".to_string()
+                };
+                let _ = write!(
+                    h,
+                    "<tr><td data-act=\"dok-open\" data-id=\"{}\"><b>{}</b></td><td>{}</td><td>{} <span class=\"muted\">({} Tage)</span></td><td>{}</td><td class=\"r\"><b>{}</b></td><td class=\"r\">{aktion}</td></tr>",
+                    x.id,
+                    esc(&x.nummer),
+                    esc(&d.kunden_name(x.kunde_id)),
+                    german(&x.faellig),
+                    tage,
+                    esc(&stufe),
+                    fmt_eur(x.rest())
+                );
+            }
+            h += "</tbody></table>";
+        }
+        h += "</div>";
+        // Verlauf aller Mahnungen
+        let mut verlauf: Vec<(&Dokument, usize)> = d.dokumente.iter().flat_map(|x| (0..x.mahnungen.len()).map(move |i| (x, i))).collect();
+        verlauf.sort_by(|a, b| b.0.mahnungen[b.1].datum.cmp(&a.0.mahnungen[a.1].datum));
+        if !verlauf.is_empty() {
+            h += "<div class=\"card\"><div class=\"card-head\"><h2>Verlauf</h2></div><div class=\"rows\">";
+            for (x, i) in verlauf.into_iter().take(30) {
+                let m = &x.mahnungen[i];
+                let _ = write!(
+                    h,
+                    "<div class=\"row static\"><div><b>{} · {}</b><span>{} · {} · Frist {}{}</span></div><div class=\"row-r\"><button class=\"icon-btn sm\" data-act=\"mahn-pdf\" data-id=\"{}\" data-v=\"{i}\" title=\"Ansehen\">{}</button><button class=\"icon-btn sm\" data-act=\"dok-open\" data-id=\"{}\" title=\"Rechnung öffnen\">{}</button></div></div>",
+                    m.label(),
+                    esc(&x.nummer),
+                    german(&m.datum),
+                    esc(&d.kunden_name(x.kunde_id)),
+                    german(&m.frist),
+                    if m.versendet { " · versendet" } else { "" },
+                    x.id,
+                    ic("eye"),
+                    x.id,
+                    ic("chevron")
+                );
+            }
+            h += "</div></div>";
+        }
+        h
+    }
+
+    fn katalog_html(&self) -> String {
+        let mut h = head("Leistungskatalog", "Häufige Leistungen und Artikel – mit einem Tipp in Angebote und Rechnungen einfügen", "", false);
+        h += &self.sec_katalog();
+        h
+    }
+
+    // -----------------------------------------------------------------------
     // Dialoge
     // -----------------------------------------------------------------------
 
@@ -1545,7 +1568,7 @@ impl App {
             "<h3>Aus Leistungskatalog einfügen</h3><div class=\"search\">{}<input type=\"search\" placeholder=\"Leistung oder Kategorie suchen …\" data-search=\"katalog\" autofocus></div><div class=\"list pick\" id=\"kat-list\">{}</div><div class=\"modal-actions\">{}{}</div>",
             ic("search"),
             self.katalog_liste(""),
-            btn("set-tab", "settings", "Katalog bearbeiten", "ghost", None, "katalog"),
+            btn("nav", "settings", "Katalog bearbeiten", "ghost", None, "katalog"),
             btn("modal-close", "", "Fertig", "primary", None, "")
         );
         self.modal(&h);
@@ -1553,6 +1576,7 @@ impl App {
 
     /// Dialog „Mahnung erstellen“ (Stufe, Datum, Frist, Gebühr, Verzugszinsen).
     pub fn mahn_modal(&mut self, id: Id, stufe: u8) {
+        self.ui.mahn_dok = Some(id);
         let heute = today();
         let Some(x) = self.data.dokument(Some(id)) else { return };
         let f = &self.data.firma;
