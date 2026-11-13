@@ -1,5 +1,6 @@
 //! Geschäftslogik ohne Browser-Abhängigkeiten.
 
+pub mod anlagen;
 pub mod aufgaben;
 pub mod backup;
 pub mod date;

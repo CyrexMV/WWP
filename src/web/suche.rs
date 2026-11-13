@@ -31,6 +31,7 @@ const BEFEHLE: &[(&str, &str, &str, &str, &str)] = &[
     ("Neue Ausgabe", "ausgabe beleg kosten buchen", "out", "buch-neu", "ausgabe"),
     ("Neue Einnahme", "einnahme buchen", "in", "buch-neu", "einnahme"),
     ("Backup speichern", "sichern datensicherung export", "database", "backup", ""),
+    ("Monteur-Modus starten", "monteur tablet mitarbeiter ohne preise", "wrench", "monteur-an", ""),
     ("Dunkles Design", "dunkel dark modus nacht", "moon", "theme", "dark"),
     ("Helles Design", "hell light modus tag", "moon", "theme", "light"),
 ];
@@ -55,14 +56,18 @@ impl App {
         let q = norm(q.trim());
         let mut gruppen: Vec<(&'static str, Vec<Treffer>)> = Vec::new();
         let leer = q.is_empty();
+        let monteur = self.monteur();
         // Befehle
         let mut bef = Vec::new();
         for (titel, worte, icon, act, v) in BEFEHLE {
+            if monteur {
+                break;
+            }
             if let Some(rang) = if leer { Some(1) } else { passt(&q, titel, worte) } {
                 bef.push(Treffer { icon, farbe: 0, titel: titel.to_string(), text: String::new(), rechts: "<kbd>↵</kbd>".into(), act: act.to_string(), id: None, v: v.to_string(), rang });
             }
         }
-        if !leer {
+        if !leer && !monteur {
             if let Some(rang) = passt(&q, "Bestätigungen", "gehe zu auftragsbestätigung ab") {
                 bef.push(Treffer { icon: "check", farbe: 7, titel: "Gehe zu Bestätigungen".into(), text: String::new(), rechts: String::new(), act: "dok-tab".into(), id: None, v: "ab".into(), rang });
             }
@@ -91,6 +96,30 @@ impl App {
                 }
             }
             gruppen.push(("Kunden", v));
+            // Anlagen
+            let mut v = Vec::new();
+            for a in &d.anlagen {
+                let kunde = d.kunden_name(a.kunde_id);
+                if let Some(rang) = passt(&q, &a.titel(), &format!("{} {} {} {}", kunde, a.seriennummer, a.standort, a.baujahr)) {
+                    v.push(Treffer { icon: "flame", farbe: 4, titel: a.titel(), text: format!("{kunde}{}", if a.seriennummer.is_empty() { String::new() } else { format!(" · SN {}", a.seriennummer) }), rechts: String::new(), act: "anlage-open".into(), id: Some(a.id), v: String::new(), rang });
+                }
+            }
+            gruppen.push(("Anlagen", v));
+            if monteur {
+                let mut v = Vec::new();
+                for t in &d.termine {
+                    if let Some(rang) = passt(&q, &t.titel, &format!("{} {}", t.ort, d.kunden_name(t.kunde_id))) {
+                        v.push(Treffer { icon: "calendar", farbe: 5, titel: t.titel.clone(), text: german(&t.datum), rechts: String::new(), act: "termin-open".into(), id: Some(t.id), v: String::new(), rang });
+                    }
+                }
+                gruppen.push(("Termine", v));
+                for (_, v) in gruppen.iter_mut() {
+                    v.sort_by_key(|t| t.rang);
+                    v.truncate(5);
+                }
+                gruppen.retain(|g| !g.1.is_empty());
+                return gruppen;
+            }
             // Aufträge
             let mut v = Vec::new();
             for a in &d.auftraege {
@@ -138,7 +167,7 @@ impl App {
                 }
             }
             gruppen.push(("Leistungen", v));
-        } else {
+        } else if !monteur {
             // zuletzt angelegte Dokumente
             let mut docs: Vec<_> = d.dokumente.iter().collect();
             docs.sort_by_key(|x| std::cmp::Reverse(x.id));

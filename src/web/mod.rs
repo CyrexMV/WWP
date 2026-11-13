@@ -16,6 +16,7 @@ mod signature;
 mod storage;
 mod suche;
 mod views;
+mod wartung;
 mod zeiten;
 
 use crate::engine::{DokArt, Id};
@@ -57,6 +58,11 @@ pub enum View {
     Mahnwesen,
     Katalog,
     Einstellungen,
+    Wartungen,
+    Anlage(Id),
+    Wartung(Id),
+    /// Startseite im Monteur-Modus
+    MeinTag,
 }
 
 /// Filter und Suchbegriffe der Listen.
@@ -178,6 +184,8 @@ impl App {
             View::Auftrag(id) => self.data.auftrag(Some(id)).is_some(),
             View::Dokument(id) => self.data.dokument(Some(id)).is_some(),
             View::Buchung(id) => self.data.buchung(Some(id)).is_some(),
+            View::Anlage(id) => self.data.anlage(Some(id)).is_some(),
+            View::Wartung(id) => self.data.wartung(Some(id)).is_some(),
             _ => true,
         }
     }

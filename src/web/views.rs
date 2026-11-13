@@ -148,8 +148,16 @@ fn chart(a: &report::Auswertung) -> String {
 
 impl App {
     pub fn render(&mut self) {
+        // Monteur-Modus: nur Mein Tag, Kunden, Wartungen und Kalender
+        if self.monteur() && !super::wartung::erlaubt_fuer_monteur(self.view()) {
+            self.stack = vec![View::MeinTag];
+        }
         set_html("nav", &self.nav_html());
         let html = match self.view() {
+            View::Wartungen => self.wartungen_html(),
+            View::Anlage(id) => self.anlage_html(id),
+            View::Wartung(id) => self.wartung_html(id),
+            View::MeinTag => self.mein_tag_html(),
             View::Start => self.start_html(),
             View::Kunden(sel) => self.kunden_html(sel),
             View::Auftraege => self.board_html(),
@@ -164,6 +172,7 @@ impl App {
             View::Einstellungen => self.settings_html(),
         };
         set_html("main", &html);
+        super::wartung::fotos_laden();
     }
 
     // -----------------------------------------------------------------------
@@ -420,6 +429,27 @@ impl App {
             german(&k.erstellt),
             contact
         );
+        if self.monteur() {
+            // Monteur: Anschrift, Navigation, Anlagen, Termine – keine Preise
+            let _ = write!(
+                h,
+                "<div class=\"card\"><div class=\"card-head\"><h2>Anschrift</h2>{}</div><p class=\"pad addr\">{}</p>{}</div>",
+                btn("kunde-route", "map", "Navigation", "ghost sm", Some(k.id), ""),
+                esc(&k.anschrift()).replace('\n', "<br>"),
+                if k.notizen.trim().is_empty() { String::new() } else { format!("<p class=\"pad muted\">{}</p>", esc(k.notizen.trim()).replace('\n', "<br>")) }
+            );
+            h += &self.anlagen_card(k.id);
+            let heute = today();
+            let ts: Vec<_> = d.naechste_termine(&heute, 50).into_iter().filter(|t| t.kunde_id == Some(k.id)).take(5).collect();
+            if !ts.is_empty() {
+                h += "<div class=\"card\"><div class=\"card-head\"><h2>Nächste Termine</h2></div><div class=\"rows\">";
+                for t in ts {
+                    h += &super::kalender::termin_row(self, t);
+                }
+                h += "</div></div>";
+            }
+            return h;
+        }
         let _ = write!(
             h,
             "<div class=\"quick\">{}{}{}{}</div>",
@@ -442,6 +472,7 @@ impl App {
         h += &text("USt-IdNr.", "k.ust_id", &k.ust_id, "");
         h += &area("Notizen", "k.notizen", &k.notizen, 3, "");
         h += "</div></div>";
+        h += &self.anlagen_card(k.id);
         let _ = write!(
             h,
             "<div class=\"card\"><div class=\"card-head\"><h2>Konditionen &amp; E-Rechnung</h2></div><div class=\"form\"><label class=\"field\"><span>Standardrabatt</span><div class=\"euro unit\"><input type=\"text\" inputmode=\"decimal\" data-f=\"k.rabatt\" value=\"{}\" placeholder=\"0\"><i>%</i></div></label><label class=\"field\"><span>Zahlungsziel</span><div class=\"euro unit\"><input type=\"text\" inputmode=\"numeric\" data-f=\"k.zahlungsziel\" value=\"{}\" placeholder=\"{}\"><i>Tage</i></div></label><label class=\"field\"><span>Skonto</span><div class=\"euro unit\"><input type=\"text\" inputmode=\"decimal\" data-f=\"k.skonto\" value=\"{}\" placeholder=\"{}\"><i>%</i></div></label>{}</div><label class=\"toggle-row\"><div><b>Rechnungen als E-Rechnung</b><span>ZUGFeRD-PDF mit eingebetteten Rechnungsdaten; vor dem Senden werden die Pflichtangaben geprüft.</span></div><input type=\"checkbox\" class=\"tgl\" data-f=\"k.erechnung\"{}></label></div>",

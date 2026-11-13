@@ -183,6 +183,21 @@ pub fn demo(heute: &str) -> Data {
         a.status = DokStatus::Versendet;
         a.versendet_am = add_days(heute, -5);
     }
+    // Anlagen (eine bald fällig, eine überfällig)
+    for (k, art, hersteller, modell, sn, baujahr, standort, tage) in [
+        (0usize, super::anlagen::AnlagenArt::GasBrennwert, "Vaillant", "ecoTEC plus VC 206/5-5", "21183400100245", "2018", "Keller, Heizraum", -350i64),
+        (1, super::anlagen::AnlagenArt::Waermepumpe, "Viessmann", "Vitocal 250-A", "7891234500017", "2022", "Garten, Außeneinheit links", -380),
+    ] {
+        let id = d.neue_anlage(Some(kid[k]));
+        let x = d.anlage_mut(id).unwrap();
+        x.art = art;
+        x.hersteller = hersteller.into();
+        x.modell = modell.into();
+        x.seriennummer = sn.into();
+        x.baujahr = baujahr.into();
+        x.standort = standort.into();
+        x.letzte_wartung = add_days(heute, tage);
+    }
     // Ausgaben
     let ausgaben = [
         (-40, 23_800, 19, "Material / Wareneinkauf", "Großhandel Sanitär", "Armaturen, Dichtungen"),

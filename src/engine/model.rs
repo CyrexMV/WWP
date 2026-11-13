@@ -33,6 +33,8 @@ pub struct Firma {
     /// Kleinunternehmerregelung (§ 19 UStG): keine Umsatzsteuer auf Rechnungen.
     pub kleinunternehmer: bool,
     pub ust_standard: u8,
+    /// PIN zum Verlassen des Monteur-Modus (leer = ohne PIN)
+    pub monteur_pin: String,
     /// Stundensatz (netto) für die Zeiterfassung
     pub stundensatz: Cents,
     /// Rücklage für Einkommensteuer in Prozent vom Gewinn (grobe Schätzung)
@@ -109,6 +111,7 @@ impl Default for Firma {
             bic: String::new(),
             kleinunternehmer: false,
             ust_standard: 19,
+            monteur_pin: String::new(),
             stundensatz: 0,
             ruecklage_prozent: 30.0,
             zahlungsziel: 14,
@@ -1108,6 +1111,10 @@ pub struct Data {
     pub nav_reihenfolge: Vec<String>,
     /// ausgeblendete Menüpunkte
     pub nav_aus: Vec<String>,
+    /// Heizungsanlagen beim Kunden
+    pub anlagen: Vec<super::anlagen::Anlage>,
+    /// Wartungsprotokolle
+    pub wartungen: Vec<super::anlagen::Wartung>,
     /// Datum des letzten gespeicherten Backups
     pub letztes_backup: String,
     /// weggeklickte Hinweise (z. B. „So funktioniert der Ablauf“)
@@ -1179,7 +1186,7 @@ impl Data {
     }
 
     /// Nächste Nummer eines Nummernkreises, z. B. „RE-2026-0007“.
-    fn next_number(&mut self, prefix: &str, year: i32, digits: usize) -> String {
+    pub(crate) fn next_number(&mut self, prefix: &str, year: i32, digits: usize) -> String {
         let p = prefix.trim();
         let key = if p.is_empty() { year.to_string() } else { format!("{p}-{year}") };
         let n = self.zaehler.entry(key.clone()).or_insert(0);

@@ -13,6 +13,10 @@ pub enum Typ {
     Ueberfaellig,
     /// Bestätigung versendet/unterschrieben, aber noch keine Rechnung (Dokument)
     Abrechnen,
+    /// Wartung einer Anlage fällig in den nächsten 30 Tagen oder überfällig (Anlage)
+    WartungFaellig,
+    /// Wartung abgeschlossen, aber noch nicht abgerechnet (Wartung)
+    WartungAbrechnen,
     /// Termin heute (Termin)
     TerminHeute,
     /// Termin morgen (Termin)
@@ -87,6 +91,19 @@ impl Data {
             }
             if d.status == DokStatus::Entwurf && d.storno_von.is_none() && d.summen().brutto != 0 && d.art != DokArt::Lieferschein {
                 v.push(a(Typ::Entwurf, Some(d.id), tage(&d.datum), false));
+            }
+        }
+        for an in &self.anlagen {
+            if let Some(n) = an.naechste_wartung() {
+                let rest = date::diff_days(heute, &n).unwrap_or(999);
+                if rest <= 30 {
+                    v.push(a(Typ::WartungFaellig, Some(an.id), rest, rest < 0));
+                }
+            }
+        }
+        for w in &self.wartungen {
+            if w.abgeschlossen && w.rechnung_id.is_none() {
+                v.push(a(Typ::WartungAbrechnen, Some(w.id), date::diff_days(&w.datum, heute).unwrap_or(0), false));
             }
         }
         let morgen = date::add_days(heute, 1);
@@ -174,6 +191,15 @@ mod tests {
         assert!(d.aufgaben("2026-11-13").iter().any(|x| x.typ == Typ::Abrechnen && x.id == Some(ab)));
         d.folgedokument(ab, DokArt::Rechnung, "2026-11-13");
         assert!(!d.aufgaben("2026-11-13").iter().any(|x| x.typ == Typ::Abrechnen));
+        // Wartung fällig
+        let an = d.neue_anlage(Some(k));
+        d.anlage_mut(an).unwrap().letzte_wartung = "2025-11-20".into();
+        assert!(d.aufgaben("2026-11-13").iter().any(|x| x.typ == Typ::WartungFaellig && x.zahl == 7));
+        let w = d.wartung_starten(an, "", "2026-11-13").unwrap();
+        d.wartung_abschliessen(w);
+        let v = d.aufgaben("2026-11-13");
+        assert!(!v.iter().any(|x| x.typ == Typ::WartungFaellig));
+        assert!(v.iter().any(|x| x.typ == Typ::WartungAbrechnen));
         // laufende Stoppuhr steht immer oben
         d.uhr_starten(au, 0.0);
         assert_eq!(d.aufgaben("2026-11-13")[0].typ, Typ::Uhr);

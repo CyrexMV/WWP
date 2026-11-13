@@ -56,6 +56,31 @@ impl App {
                         btn("dok-open", "", "Öffnen", "ghost sm", x.id, ""),
                     )
                 }
+                Typ::WartungFaellig => {
+                    let a = d.anlage(x.id);
+                    let wann = match x.zahl {
+                        n if n < 0 => format!("seit {} fällig", tage(-n)),
+                        0 => "heute fällig".into(),
+                        n => format!("fällig in {}", tage(n)),
+                    };
+                    (
+                        "wrench",
+                        if x.dringend { "rot" } else { "gelb" },
+                        format!("Wartung: {}", esc(&kunde(a.and_then(|a| a.kunde_id)))),
+                        format!("{} · {wann}", esc(&a.map(|a| a.titel()).unwrap_or_default())),
+                        btn("wa-start", "wrench", "Starten", "ghost sm", x.id, ""),
+                    )
+                }
+                Typ::WartungAbrechnen => {
+                    let w = d.wartung(x.id);
+                    (
+                        "receipt",
+                        "lila",
+                        format!("Wartung {} abrechnen", esc(&w.map(|w| w.nummer.clone()).unwrap_or_default())),
+                        format!("{} · {}", esc(&kunde(w.and_then(|w| w.kunde_id))), german(&w.map(|w| w.datum.clone()).unwrap_or_default())),
+                        btn("wa-rechnung", "receipt", "Rechnung", "primary sm", x.id, ""),
+                    )
+                }
                 Typ::Abrechnen => {
                     let dk = dok.unwrap();
                     (

@@ -383,6 +383,27 @@ pub fn bind_files() {
             a.toast("Beleg angehängt");
         });
     });
+    on_file("file-foto", |name, mime, bytes| {
+        with_app(|a| {
+            let View::Anlage(aid) = a.view() else { return };
+            if !image::is_png(&bytes) && !image::is_jpeg(&bytes) {
+                a.toast("Bitte ein Foto (JPG oder PNG) wählen");
+                return;
+            }
+            let mime = if mime.is_empty() { if image::is_png(&bytes) { "image/png".to_string() } else { "image/jpeg".to_string() } } else { mime };
+            let Some(fid) = a.store_file(&name, &mime, &bytes) else {
+                a.toast("Foto konnte nicht gespeichert werden");
+                return;
+            };
+            let alt = a.data.anlage_mut(aid).and_then(|x| x.foto.replace(fid));
+            if let Some(o) = alt {
+                a.drop_file(o);
+            }
+            a.changed();
+            a.render();
+            a.toast("Foto gespeichert");
+        });
+    });
     on_file("file-restore", |_name, _mime, bytes| {
         let text = String::from_utf8_lossy(&bytes).to_string();
         with_app(|a| a.ask_restore(text));

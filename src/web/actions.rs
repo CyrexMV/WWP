@@ -145,7 +145,7 @@ impl App {
     // -----------------------------------------------------------------------
 
     pub fn action(&mut self, act: &str, id: Option<Id>, v: &str) {
-        if self.settings_action(act, v) || self.nav_action(act, v) || self.zeit_action(act, id, v) || self.suche_action(act, id, v) {
+        if self.settings_action(act, v) || self.nav_action(act, v) || self.zeit_action(act, id, v) || self.suche_action(act, id, v) || self.wartung_action(act, id, v) {
             return;
         }
         let heute = today();
@@ -982,6 +982,10 @@ impl App {
         let (scope, rest) = key.split_once('.').unwrap_or((key, ""));
         let view = self.view();
         match (scope, view) {
+            ("an" | "wa" | "wp" | "wm" | "mt", _) => {
+                self.wartung_feld(scope, rest, v);
+                return;
+            }
             ("z", View::Auftrag(_)) => {
                 self.zeit_feld(rest, v);
                 return;
@@ -1117,6 +1121,7 @@ impl App {
                     }
                     "ust_standard" => f.ust_standard = v.parse().unwrap_or(19),
                     "zahlungsziel" => f.zahlungsziel = v.trim().parse().unwrap_or(f.zahlungsziel),
+                    "monteur_pin" => f.monteur_pin = v.trim().to_string(),
                     "stundensatz" => f.stundensatz = parse_amount(v).unwrap_or(0).max(0),
                     "ruecklage_prozent" => f.ruecklage_prozent = parse_decimal(v).unwrap_or(0.0).clamp(0.0, 100.0),
                     "angebot_gueltig" => f.angebot_gueltig = v.trim().parse().unwrap_or(f.angebot_gueltig),

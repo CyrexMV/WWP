@@ -12,7 +12,8 @@ use super::fonts;
 use super::girocode;
 use super::pdfa;
 use super::ttf;
-use super::model::{briefanrede, positionsnummern, zwischensummen, Data, DokArt, Dokument, Firma, Kunde, PosArt, UNTERSCHRIFT_VERHAELTNIS};
+use super::anlagen::{Pruefung, Wartung};
+use super::model::{briefanrede, positionsnummern, zwischensummen, Data, DokArt, Dokument, Firma, Kunde, PosArt, Unterschrift, UNTERSCHRIFT_VERHAELTNIS};
 use super::money::{fmt_eur, fmt_num, fmt_qty, Cents};
 use super::report::Auswertung;
 use miniz_oxide::deflate::compress_to_vec_zlib;
@@ -966,21 +967,26 @@ fn dokument_seiten(data: &Data, doc: &Dokument, logo: Option<&[u8]>) -> Vec<Canv
 const SIG_W: f32 = 70.0;
 
 /// Unterschriftsfeld: vorhandene Unterschrift als Vektor-Tinte, sonst leere Linien zum Unterschreiben.
-fn unterschrift_block(pages: &mut Vec<Canvas>, c: &mut Canvas, mut y: f32, doc: &Dokument) -> f32 {
-    let sig_h = SIG_W / UNTERSCHRIFT_VERHAELTNIS;
-    if y + sig_h + 16.0 > BOTTOM {
-        y = new_page(pages, c);
-    }
+fn unterschrift_block(pages: &mut Vec<Canvas>, c: &mut Canvas, y: f32, doc: &Dokument) -> f32 {
     let titel = match doc.art {
         DokArt::Angebot => "Angebot angenommen – Auftrag erteilt",
         DokArt::Auftragsbestaetigung => "Auftrag bestätigt",
         DokArt::Lieferschein => "Leistung erhalten und abgenommen",
         DokArt::Rechnung => "",
     };
+    unterschrift_feld(pages, c, y, titel, doc.unterschrift.as_ref(), "Unterschrift Auftraggeber (Name in Druckbuchstaben)")
+}
+
+/// Unterschrift (Vektor-Tinte) oder leere Linien zum Unterschreiben.
+fn unterschrift_feld(pages: &mut Vec<Canvas>, c: &mut Canvas, mut y: f32, titel: &str, unterschrift: Option<&Unterschrift>, leer_label: &str) -> f32 {
+    let sig_h = SIG_W / UNTERSCHRIFT_VERHAELTNIS;
+    if y + sig_h + 16.0 > BOTTOM {
+        y = new_page(pages, c);
+    }
     c.text(LEFT, y, 9.0, true, BLACK, titel);
     let top = y + 1.5;
     let base = top + sig_h;
-    match &doc.unterschrift {
+    match unterschrift {
         Some(u) => {
             let _ = writeln!(c.c, "q 1 J 1 j {} RG", rgb([0.08, 0.12, 0.35]));
             for strich in &u.striche {
@@ -1018,11 +1024,155 @@ fn unterschrift_block(pages: &mut Vec<Canvas>, c: &mut Canvas, mut y: f32, doc: 
             c.line(LEFT, lb, LEFT + 50.0, lb, 0.4, GRAY);
             c.line(LEFT + 60.0, lb, RIGHT, lb, 0.4, GRAY);
             c.text(LEFT, lb + 3.8, 8.0, false, GRAY, "Ort, Datum");
-            c.text(LEFT + 60.0, lb + 3.8, 8.0, false, GRAY, "Unterschrift Auftraggeber (Name in Druckbuchstaben)");
+            c.text(LEFT + 60.0, lb + 3.8, 8.0, false, GRAY, leer_label);
             return lb + 12.0;
         }
     }
     base + 13.0
+}
+
+/// Wartungsprotokoll als PDF: Anlage, Prüfpunkte, Messwerte, Arbeiten, Mängel, nächste Wartung, Unterschrift.
+pub fn wartung_pdf(data: &Data, w: &Wartung, logo: Option<&[u8]>) -> Vec<u8> {
+    let f = &data.firma;
+    let accent = hex_color(&f.farbe);
+    let logo = logo.filter(|b| image::is_png(b) || image::is_jpeg(b));
+    let kunde = data.kunde(w.kunde_id);
+    let anlage = data.anlage(w.anlage_id);
+    let mut pages: Vec<Canvas> = Vec::new();
+    let mut c = Canvas::default();
+    let mut info = vec![("Protokoll-Nr.".to_string(), w.nummer.clone()), ("Datum".to_string(), date::german(&w.datum))];
+    if let Some(k) = kunde {
+        if !k.nr.is_empty() {
+            info.push(("Kundennr.".into(), k.nr.clone()));
+        }
+    }
+    if !w.monteur.trim().is_empty() {
+        info.push(("Monteur".into(), w.monteur.trim().to_string()));
+    }
+    let empf = kunde.map(|k| k.anschrift()).unwrap_or_default();
+    let mut y = briefkopf(&mut c, f, logo, &empf, &info);
+    c.text(LEFT, y, 15.0, true, BLACK, "Wartungsprotokoll");
+    y += 9.0;
+
+    // Anlage
+    let abschnitt = |c: &mut Canvas, y: f32, titel: &str| {
+        c.rect(LEFT, y - 4.6, RIGHT - LEFT, 6.6, mix_white(accent, 0.12));
+        c.text(LEFT + 1.5, y, 9.5, true, BLACK, titel);
+    };
+    abschnitt(&mut c, y, "Anlage");
+    y += 6.5;
+    if let Some(a) = anlage {
+        let felder = [
+            ("Art", a.art.label().to_string()),
+            ("Hersteller / Modell", [a.hersteller.trim(), a.modell.trim()].iter().filter(|s| !s.is_empty()).cloned().collect::<Vec<_>>().join(" ")),
+            ("Seriennummer", a.seriennummer.trim().to_string()),
+            ("Baujahr", a.baujahr.trim().to_string()),
+            ("Leistung", a.leistung.trim().to_string()),
+            ("Standort", a.standort.trim().to_string()),
+        ];
+        let sichtbar: Vec<_> = felder.iter().filter(|(_, v)| !v.is_empty()).collect();
+        for (i, (k, v)) in sichtbar.iter().enumerate() {
+            let x = if i % 2 == 0 { LEFT + 1.5 } else { 108.0 };
+            c.text(x, y, 8.5, false, GRAY, k);
+            c.text(x + 30.0, y, 9.0, false, BLACK, &wrap(v, 52.0, 9.0, false).into_iter().next().unwrap_or_default());
+            if i % 2 == 1 || i + 1 == sichtbar.len() {
+                y += 5.2;
+            }
+        }
+    } else {
+        c.text(LEFT + 1.5, y, 9.0, false, GRAY, "Anlage nicht mehr vorhanden");
+        y += 5.2;
+    }
+    y += 4.0;
+
+    // Prüfpunkte
+    abschnitt(&mut c, y, "Durchgeführte Prüfungen");
+    c.text_right(RIGHT - 1.5, y, 8.5, true, BLACK, "Ergebnis");
+    y += 6.5;
+    for p in &w.pruefpunkte {
+        let zeilen = wrap(&p.text, 120.0, 9.0, false);
+        let notiz = if p.notiz.trim().is_empty() { Vec::new() } else { wrap(p.notiz.trim(), 116.0, 8.5, false) };
+        let hoehe = 4.8 * zeilen.len() as f32 + 4.4 * notiz.len() as f32 + 0.8;
+        if y + hoehe > BOTTOM {
+            y = new_page(&mut pages, &mut c);
+        }
+        let farbe = match p.status {
+            Pruefung::Ok => [0.06, 0.55, 0.33],
+            Pruefung::Mangel => [0.80, 0.18, 0.22],
+            _ => GRAY,
+        };
+        for (i, z) in zeilen.iter().enumerate() {
+            c.text(LEFT + 1.5, y, 9.0, false, BLACK, z);
+            if i == 0 {
+                c.text_right(RIGHT - 1.5, y, 9.0, true, farbe, p.status.label());
+            }
+            y += 4.8;
+        }
+        for z in notiz {
+            c.text(LEFT + 5.0, y, 8.5, false, GRAY, &z);
+            y += 4.4;
+        }
+        c.line(LEFT, y - 3.3, RIGHT, y - 3.3, 0.2, LINE);
+        y += 0.8;
+    }
+    y += 3.0;
+
+    // Messwerte
+    let mw: Vec<_> = w.messwerte.iter().filter(|m| !m.wert.trim().is_empty()).collect();
+    if !mw.is_empty() {
+        if y + 14.0 > BOTTOM {
+            y = new_page(&mut pages, &mut c);
+        }
+        abschnitt(&mut c, y, "Messwerte");
+        y += 6.5;
+        for (i, m) in mw.iter().enumerate() {
+            if y > BOTTOM {
+                y = new_page(&mut pages, &mut c);
+            }
+            let x = if i % 2 == 0 { LEFT + 1.5 } else { 108.0 };
+            c.text(x, y, 8.5, false, GRAY, &m.name);
+            c.text_right(x + 79.0, y, 9.0, true, BLACK, &format!("{} {}", m.wert.trim(), m.einheit));
+            if i % 2 == 1 || i + 1 == mw.len() {
+                y += 5.2;
+            }
+        }
+        y += 4.0;
+    }
+
+    // Arbeiten, Mängel
+    for (titel, text) in [("Durchgeführte Arbeiten / Bemerkungen", &w.arbeiten), ("Festgestellte Mängel / Empfehlungen", &w.maengel)] {
+        if text.trim().is_empty() {
+            continue;
+        }
+        if y + 14.0 > BOTTOM {
+            y = new_page(&mut pages, &mut c);
+        }
+        abschnitt(&mut c, y, titel);
+        y += 7.0;
+        y = absatz(&mut pages, &mut c, y, text.trim());
+        y += 4.0;
+    }
+    if let Some(n) = anlage.and_then(|a| a.naechste_wartung()) {
+        if y + 8.0 > BOTTOM {
+            y = new_page(&mut pages, &mut c);
+        }
+        let (jj, mm, _) = date::parse(&n).unwrap_or((0, 0, 0));
+        c.text(LEFT, y, 9.5, true, accent, &format!("Nächste Wartung empfohlen: {:02}/{}", mm, jj));
+        y += 9.0;
+    }
+    y += 2.0;
+    let monteur = if w.monteur.trim().is_empty() { f.name.trim().to_string() } else { w.monteur.trim().to_string() };
+    if !monteur.is_empty() {
+        c.text(LEFT, y, 9.0, false, GRAY, &format!("Durchgeführt von: {monteur}"));
+        y += 8.0;
+    }
+    unterschrift_feld(&mut pages, &mut c, y, "Wartung durchgeführt – bestätigt durch den Kunden", w.unterschrift.as_ref(), "Unterschrift Kunde");
+    pages.push(c);
+    let total = pages.len();
+    for (i, p) in pages.iter_mut().enumerate() {
+        footer(p, f, i + 1, total);
+    }
+    assemble(pages, logo, &format!("Wartungsprotokoll {}", w.nummer), &f.name, &w.datum, None)
 }
 
 /// Angebot oder Rechnung als PDF.
@@ -1433,5 +1583,26 @@ mod tests {
         let a = report::auswertung(&d, 2026);
         let bytes = auswertung_pdf(&d, &a, "2026-11-12", None);
         assert!(bytes.starts_with(b"%PDF"));
+    }
+
+    #[test]
+    fn wartungsprotokoll_pdf() {
+        let mut d = Data::new();
+        d.firma.name = "Heizung Muster".into();
+        let k = d.neuer_kunde("2026-01-01");
+        let a = d.neue_anlage(Some(k));
+        d.anlage_mut(a).unwrap().hersteller = "Vaillant".into();
+        let w = d.wartung_starten(a, "Max Monteur", "2026-11-13").unwrap();
+        {
+            let x = d.wartung_mut(w).unwrap();
+            x.pruefpunkte[0].status = crate::engine::anlagen::Pruefung::Mangel;
+            x.pruefpunkte[0].notiz = "Brennerdichtung porös – Austausch empfohlen".into();
+            x.messwerte[0].wert = "48".into();
+            x.arbeiten = "Wartung nach Herstellervorgabe durchgeführt.".into();
+        }
+        d.wartung_abschliessen(w);
+        let pdf = wartung_pdf(&d, d.wartung(Some(w)).unwrap(), None);
+        assert!(pdf.starts_with(b"%PDF"));
+        assert!(pdf.len() > 2_000);
     }
 }

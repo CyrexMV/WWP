@@ -24,7 +24,7 @@ js-sys = "0.3"
 version = "0.3"
 features = [
   "Window", "Document", "Element", "HtmlElement", "Node", "NodeList", "EventTarget", "Event",
-  "ScrollIntoViewOptions", "ScrollLogicalPosition",
+  "ScrollIntoViewOptions", "ScrollLogicalPosition", "HtmlImageElement",
   "MouseEvent", "KeyboardEvent", "HtmlInputElement", "HtmlSelectElement", "HtmlTextAreaElement",
   "HtmlAnchorElement", "Blob", "BlobPropertyBag", "File", "FileList", "Url", "Storage",
   "Navigator", "ServiceWorkerContainer", "IdbFactory", "IdbDatabase", "IdbOpenDbRequest",

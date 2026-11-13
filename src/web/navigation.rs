@@ -10,10 +10,19 @@ use std::fmt::Write as _;
 pub const NAV: &[(&str, &str, &str)] = &[
     ("start", "home", "Übersicht"),
     ("kunden", "users", "Kunden"),
+    ("wartungen", "wrench", "Wartungen"),
     ("rechnungen", "receipt", "Rechnungen"),
     ("kalender", "calendar", "Kalender"),
     ("finanzen", "wallet", "Finanzen"),
     ("katalog", "book", "Leistungskatalog"),
+];
+
+/// Menü im Monteur-Modus (fest, ohne Preise und Finanzen)
+pub const MONTEUR_NAV: &[(&str, &str, &str)] = &[
+    ("meintag", "sun", "Mein Tag"),
+    ("kunden", "users", "Kunden"),
+    ("wartungen", "wrench", "Wartungen"),
+    ("kalender", "calendar", "Kalender"),
 ];
 
 /// Ziel-Ansicht eines Menüpunkts.
@@ -29,6 +38,8 @@ pub fn ziel(key: &str) -> View {
         "finanzen" => View::Finanzen,
         "katalog" => View::Katalog,
         "einstellungen" => View::Einstellungen,
+        "wartungen" => View::Wartungen,
+        "meintag" => View::MeinTag,
         _ => View::Start,
     }
 }
@@ -76,6 +87,8 @@ impl App {
             View::Finanzen | View::Buchung(_) => "finanzen",
             View::Katalog => "katalog",
             View::Einstellungen => "einstellungen",
+            View::Wartungen | View::Anlage(_) | View::Wartung(_) => "wartungen",
+            View::MeinTag => "meintag",
             View::Start => "start",
         }
     }
@@ -87,6 +100,7 @@ impl App {
         match key {
             "auftraege" => (d.auftraege.iter().filter(|a| a.status == AuftragStatus::Anfrage).count(), false),
             "kalender" => (d.termine_am(&heute).len(), false),
+            "wartungen" => (d.anlagen.iter().filter(|a| a.naechste_wartung().is_some_and(|n| n.as_str() <= heute.as_str())).count(), true),
             "rechnungen" => (d.dokumente.iter().filter(|x| x.ueberfaellig(&heute)).count(), true),
             _ => (0, false),
         }
@@ -110,6 +124,18 @@ impl App {
             Some(u) => format!("<img class=\"brand-logo\" src=\"{}\" alt=\"\">", esc(u)),
             None => format!("<div class=\"brand-mark\">{}</div>", ic("logo")),
         };
+        if self.monteur() {
+            let mut h = format!("<div class=\"brand\">{logo}<span>{}</span></div><div class=\"monteur-badge\">{}<span>Monteur-Modus</span></div><div class=\"nav-list\">", esc(&firm), ic("wrench"));
+            for (key, icon, label) in MONTEUR_NAV {
+                h += &item(key, icon, label, self.nav_zahl(key));
+            }
+            let _ = write!(
+                h,
+                "</div><div class=\"nav-space\"></div><div class=\"nav-foot\"><button class=\"nav-item\" data-act=\"monteur-aus\" title=\"Monteur-Modus beenden\">{}<span>Beenden</span></button></div><p class=\"save-state\" id=\"save-state\">Gespeichert</p>",
+                ic("logout")
+            );
+            return h;
+        }
         let mut h = format!(
             "<div class=\"brand\">{logo}<span>{}</span></div><button class=\"nav-search\" data-act=\"suche\" title=\"Suchen (Strg+K)\">{}<span>Suchen …</span><kbd>Strg K</kbd></button><div class=\"nav-list\">",
             esc(&firm),

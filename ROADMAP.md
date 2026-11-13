@@ -22,6 +22,7 @@ der Stand wird im GitHub-Project-Board verfolgt.
 | [#7](https://github.com/CyrexMV/WWP/issues/7) | ✅ Zeiterfassung pro Auftrag → direkt in die Rechnung | Aufträge |
 | [#20](https://github.com/CyrexMV/WWP/issues/20) | ✅ Steuerrücklage-Rechner und Umsatzprognose | Finanzen |
 | – | ✅ „Heute zu tun“: automatische Aufgaben inkl. Angebote nachfassen (Teil von #15) und Backup-Erinnerung (Teil von #5) | Assistent |
+| – | ✅ Anlagen beim Kunden (mit Typenschild-Foto), digitales Wartungsprotokoll (Checkliste, Messwerte, Unterschrift, PDF, Rechnung), Monteur-Modus mit PIN | Wartung |
 | – | ✅ Vereinfacht: nur noch Kunde → Bestätigung → Rechnung; Angebote und Aufträge ausgeblendet, Rechnungen mit Reitern (Bestätigungen, Mahnwesen) | Design |
 | – | ✅ Leistungskatalog: Vorlage Heizungsbau mit 50 Leistungen und Artikeln (Richtpreise) | Rechnungen |
 | – | ✅ Neues Design: Indigo/Violett, dunkle Seitenleiste, Schrift Inter, Gewinn-Übersicht mit Verlauf, Symbole an Kennzahlen | Design |

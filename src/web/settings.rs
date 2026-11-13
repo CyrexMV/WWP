@@ -605,6 +605,16 @@ impl App {
             "Reihenfolge am Griff ziehen oder mit den Pfeilen ändern; mit dem Schalter Menüpunkte ein- und ausblenden.",
             &self.nav_einstellungen_html(),
         );
+        let f = &self.data.firma;
+        out += &group(
+            "Monteur-Modus",
+            "Für Tablets der Monteure: nur Mein Tag, Kunden, Anlagen, Wartungsprotokolle und Kalender – keine Preise, Rechnungen oder Finanzen. Die Einstellung gilt für dieses Gerät.",
+            &format!(
+                "<div class=\"form\">{}</div><div class=\"pad-top\">{}</div>",
+                text("PIN zum Beenden (optional)", "f.monteur_pin", &f.monteur_pin, "inputmode=\"numeric\" autocomplete=\"off\" placeholder=\"z. B. 1234 – leer = ohne PIN\""),
+                btn("monteur-an", "wrench", "Monteur-Modus starten", "primary", None, "")
+            ),
+        );
         out
     }
 

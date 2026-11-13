@@ -15,6 +15,8 @@ use web_sys::{CanvasRenderingContext2d, Event, HtmlCanvasElement, PointerEvent};
 /// Zustand des offenen Unterschriftenfelds.
 pub struct Pad {
     pub dok: Id,
+    /// Unterschrift für ein Wartungsprotokoll statt für ein Dokument
+    pub wartung: bool,
     pub striche: Vec<Vec<[f32; 3]>>,
     aktiv: Option<i32>,
     stift: bool,
@@ -235,8 +237,32 @@ impl App {
             btn("modal-close", "", "Abbrechen", "ghost", None, ""),
             btn("sig-ok", "check", "Unterschrift übernehmen", "primary", Some(dok), "")
         );
-        self.pad = Some(Pad { dok, striche: Vec::new(), aktiv: None, stift: false });
-        self.modal(&html);
+        self.pad_oeffnen(dok, false, &html);
+    }
+
+    /// Unterschriftenfeld für ein Wartungsprotokoll.
+    pub fn sig_open_wartung(&mut self, wid: Id) {
+        let Some(w) = self.data.wartung(Some(wid)) else { return };
+        let k = self.data.kunde(w.kunde_id);
+        let name = k.map(|k| if k.ansprechpartner.trim().is_empty() { k.name() } else { k.ansprechpartner.trim().to_string() }).unwrap_or_default();
+        let ort = k.map(|k| k.ort.trim().to_string()).unwrap_or_default();
+        let erklaerung = format!("Hiermit bestätige ich die Durchführung der Wartung laut Protokoll {} vom {}.", w.nummer, crate::engine::date::german(&w.datum));
+        let html = format!(
+            "<h3>Unterschrift des Kunden</h3><p class=\"muted\">{}</p><div class=\"sig-pad\" id=\"sig-pad\"><canvas id=\"sig-canvas\"></canvas><span class=\"sig-hint\">{}Hier mit dem S-Pen oder dem Finger unterschreiben</span><span class=\"sig-x\">×</span><i class=\"sig-line\"></i></div><div class=\"form\"><label class=\"field\"><span>Name in Druckbuchstaben</span><input type=\"text\" id=\"sig-name\" value=\"{}\"></label><label class=\"field\"><span>Ort</span><input type=\"text\" id=\"sig-ort\" value=\"{}\"></label></div><div class=\"modal-actions spread\">{}<span class=\"flex1\"></span>{}{}</div>",
+            esc(&erklaerung),
+            ic("pen"),
+            esc(&name),
+            esc(&ort),
+            btn("sig-clear", "undo", "Neu", "ghost", None, ""),
+            btn("modal-close", "", "Abbrechen", "ghost", None, ""),
+            btn("sig-ok", "check", "Unterschrift übernehmen", "primary", Some(wid), "")
+        );
+        self.pad_oeffnen(wid, true, &html);
+    }
+
+    fn pad_oeffnen(&mut self, dok: Id, wartung: bool, html: &str) {
+        self.pad = Some(Pad { dok, wartung, striche: Vec::new(), aktiv: None, stift: false });
+        self.modal(html);
         if let Some(m) = el("modal-card") {
             let _ = m.class_list().add_1("wide");
         }
@@ -273,7 +299,8 @@ impl App {
             return;
         }
         let dok = pad.dok;
-        if self.data.unterschreiben(dok, u, &today()) {
+        let ok = if pad.wartung { self.data.wartung_unterschreiben(dok, u) } else { self.data.unterschreiben(dok, u, &today()) };
+        if ok {
             self.close_modal();
             self.changed();
             self.render();

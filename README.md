@@ -18,6 +18,18 @@ Kunden, Aufträge, Angebote, Rechnungen und Finanzen an einem Ort – **komplett
 - **Globale Suche & Schnellbefehle** (Strg+K, „/“ oder Lupe): Kunden, Aufträge, Dokumente (auch nach Betrag),
   Buchungen, Termine, Leistungen und Befehle wie „Neue Rechnung“ in einem Feld, mit Pfeiltasten bedienbar
 
+**Anlagen & Wartung (für Heizungsbetriebe)**
+- **Anlagen beim Kunden**: Gas-Brennwert, Öl, Wärmepumpe, Pellet … mit Hersteller, Modell, Seriennummer, Baujahr,
+  Leistung, Standort, Notizen und **Foto vom Typenschild**; Wartungsintervall → nächste Fälligkeit automatisch
+- **Digitales Wartungsprotokoll**: Checkliste passend zur Anlagenart (OK / Mangel / entfällt, Notiz je Mangel),
+  Messwerte (Abgas, CO2, O2, CO, Drücke … bzw. Vor-/Rücklauf bei Wärmepumpen), Arbeiten und Empfehlungen,
+  **Unterschrift des Kunden** per S-Pen, PDF im Briefbogen, per E-Mail an den Kunden; beim Abschließen wird die
+  nächste Wartung vorgemerkt; mit einem Tipp die Rechnung (Preis aus dem Leistungskatalog)
+- Bereich **Wartungen**: fällige Anlagen (30 Tage), alle Anlagen, letzte Protokolle; „Heute zu tun“ meldet fällige
+  und noch nicht abgerechnete Wartungen
+- **Monteur-Modus** (pro Gerät, Einstellungen → Darstellung): nur *Mein Tag*, Kunden, Wartungen und Kalender –
+  keine Preise, Rechnungen oder Finanzen; Navigation zum Kunden; Beenden optional nur mit PIN
+
 **Einfacher Ablauf: Kunde → Bestätigung → Rechnung**
 - Seitenleiste: Übersicht, Kunden, Rechnungen (mit Reitern *Rechnungen · Bestätigungen · Mahnwesen*), Kalender,
   Finanzen, Leistungskatalog
@@ -160,6 +172,7 @@ src/web/      Oberfläche (wasm-bindgen / web-sys)
   settings.rs   Einstellungen mit Bereichen und Live-Vorschau
   kalender.rs   Wochen-/Monatsansicht, Termin-Dialog
   dnd.rs        Listen per Ziehen umsortieren (Positionen, Seitenleiste)
+  wartung.rs    Anlagen, Wartungsprotokoll, Monteur-Modus
   suche.rs      globale Suche und Schnellbefehle
   heute.rs      „Heute zu tun“ auf der Übersicht
   zeiten.rs     Zeiterfassung im Auftrag (Stoppuhr)
