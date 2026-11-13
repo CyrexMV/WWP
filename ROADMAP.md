@@ -18,6 +18,7 @@ der Stand wird im GitHub-Project-Board verfolgt.
 | – | ✅ Einstellungen neu gestaltet (Bereiche, Live-Vorschau, Einrichtungsstand) | Design |
 | – | ✅ Eigene Menüpunkte für Auftragsbestätigungen, Mahnwesen und Leistungskatalog | Design |
 | – | ✅ Seitenleiste anpassbar: Reihenfolge per Ziehen/Pfeilen, Menüpunkte ein- und ausblenden | Design |
+| – | ✅ Neues Design: Indigo/Violett, dunkle Seitenleiste, Schrift Inter, Gewinn-Übersicht mit Verlauf, Symbole an Kennzahlen | Design |
 | – | ✅ Ablauf vereinfacht: Schrittleiste Angebot → Bestätigung → Rechnung, aufgeräumte Aktionen; Lieferscheine entfernt | Design |
 
 ## Priorität hoch

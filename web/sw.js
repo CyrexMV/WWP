@@ -5,6 +5,7 @@ const FILES = [
   './',
   './index.html',
   './style.css',
+  './fonts/inter.woff2',
   './manifest.webmanifest',
   './pkg/wwp.js',
   './pkg/wwp_bg.wasm',

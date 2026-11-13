@@ -152,8 +152,9 @@ src/web/      Oberfläche (wasm-bindgen / web-sys)
   settings.rs   Einstellungen mit Bereichen und Live-Vorschau
   kalender.rs   Wochen-/Monatsansicht, Termin-Dialog
   dnd.rs        Listen per Ziehen umsortieren (Positionen, Seitenleiste)
+  ablauf.rs     Schrittleiste Angebot → Bestätigung → Rechnung
   navigation.rs Seitenleiste: Menüpunkte, anpassbare Reihenfolge und Sichtbarkeit
 assets/fonts/ eingebettete Schriften (Liberation Sans, WinAnsi-Teilmenge) mit Lizenz
-web/          index.html, style.css, Manifest, Icons, Service Worker
+web/          index.html, style.css, Manifest, Icons, Service Worker, Schrift Inter (OFL)
 android/      Android-Hülle (WebView) mit Brücke für Speichern, PDF öffnen, E-Mail/Teilen und Kamera
 ```

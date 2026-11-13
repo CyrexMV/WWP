@@ -98,10 +98,11 @@ pub(super) fn head(title: &str, sub: &str, actions: &str, back: bool) -> String 
     format!("<header class=\"page-head\">{b}<div class=\"ph-title\"><h1>{}</h1>{sub}</div><div class=\"ph-actions\">{actions}</div></header>", esc(title))
 }
 
-fn kpi(label: &str, value: &str, note: &str, cls: &str, act: &str) -> String {
+fn kpi(icon: &str, label: &str, value: &str, note: &str, cls: &str, act: &str) -> String {
     let a = if act.is_empty() { String::new() } else { format!(" data-act=\"{act}\"") };
     format!(
-        "<div class=\"kpi {cls}\"{a}><span class=\"kpi-l\">{}</span><b class=\"kpi-v\">{}</b><span class=\"kpi-n\">{}</span></div>",
+        "<div class=\"kpi {cls}\"{a}><div class=\"kpi-top\"><span class=\"kpi-ic\">{}</span><span class=\"kpi-l\">{}</span></div><b class=\"kpi-v\">{}</b><span class=\"kpi-n\">{}</span></div>",
+        ic(icon),
         esc(label),
         esc(value),
         note
@@ -204,8 +205,20 @@ impl App {
             );
         }
 
-        h += "<section class=\"kpis\">";
+        h += "<section class=\"kpis start\">";
+        let g = a.gewinn();
+        let _ = write!(
+            h,
+            "<div class=\"hero\" data-act=\"nav-fin\"><div class=\"hero-top\"><span>Gewinn {jahr}</span><em>netto, bezahlt</em></div><b class=\"hero-v{}\">{}</b><div class=\"hero-stats\"><div><i>{}</i><span>Einnahmen<b>{}</b></span></div><div><i>{}</i><span>Ausgaben<b>{}</b></span></div></div></div>",
+            if g < 0 { " neg" } else { "" },
+            esc(&fmt_eur(g)),
+            ic("in"),
+            esc(&fmt_eur(a.ein.netto)),
+            ic("out"),
+            esc(&fmt_eur(a.aus.netto))
+        );
         h += &kpi(
+            "receipt",
             "Offene Rechnungen",
             &fmt_eur(offen_sum),
             &if ueber.is_empty() {
@@ -222,11 +235,8 @@ impl App {
             if ueber.is_empty() { "" } else { "warn" },
             if zu_mahnen > 0 { "kpi-mahnen" } else { "kpi-offen" },
         );
-        h += &kpi(&format!("Einnahmen {jahr}"), &fmt_eur(a.ein.netto), "netto, bezahlt", "", "nav-fin");
-        h += &kpi(&format!("Ausgaben {jahr}"), &fmt_eur(a.aus.netto), "netto", "", "nav-fin");
-        h += &kpi(&format!("Gewinn {jahr}"), &fmt_eur(a.gewinn()), "Einnahmen − Ausgaben", if a.gewinn() < 0 { "warn" } else { "good" }, "nav-fin");
-        h += &kpi("Offene Angebote", &fmt_eur(angebote_sum), &format!("{} versendet, netto", angebote.len()), "", "kpi-angebote");
-        h += &kpi("Aufträge", &format!("{aktiv} aktiv"), &format!("{anfragen} neue Anfrage(n)"), "", "kpi-auftraege");
+        h += &kpi("file", "Offene Angebote", &fmt_eur(angebote_sum), &format!("{} versendet, netto", angebote.len()), "", "kpi-angebote");
+        h += &kpi("briefcase", "Aufträge", &format!("{aktiv} aktiv"), &format!("{anfragen} neue Anfrage(n)"), "", "kpi-auftraege");
         h += "</section>";
 
         h += "<section class=\"grid2\">";
@@ -450,9 +460,9 @@ impl App {
         let _ = write!(
             h,
             "<div class=\"kpis small\">{}{}{}</div>",
-            kpi("Umsatz (bezahlt)", &fmt_eur(d.umsatz_kunde(k.id)), "brutto", "", ""),
-            kpi("Offen", &fmt_eur(offen), "brutto", if offen > 0 { "warn" } else { "" }, ""),
-            kpi("Aufträge", &d.auftraege_von(k.id).len().to_string(), "gesamt", "", "")
+            kpi("wallet", "Umsatz (bezahlt)", &fmt_eur(d.umsatz_kunde(k.id)), "brutto", "", ""),
+            kpi("receipt", "Offen", &fmt_eur(offen), "brutto", if offen > 0 { "warn" } else { "" }, ""),
+            kpi("briefcase", "Aufträge", &d.auftraege_von(k.id).len().to_string(), "gesamt", "", "")
         );
 
         let heute = today();
@@ -1227,11 +1237,11 @@ impl App {
             false,
         );
         h += "<section class=\"kpis\">";
-        h += &kpi("Einnahmen", &fmt_eur(a.ein.netto), &format!("netto · brutto {}", esc(&fmt_eur(a.ein.brutto))), "", "");
-        h += &kpi("Ausgaben", &fmt_eur(a.aus.netto), &format!("netto · brutto {}", esc(&fmt_eur(a.aus.brutto))), "", "");
-        h += &kpi("Gewinn", &fmt_eur(a.gewinn()), "vereinfacht, netto", if a.gewinn() < 0 { "warn" } else { "good" }, "");
+        h += &kpi("in", "Einnahmen", &fmt_eur(a.ein.netto), &format!("netto · brutto {}", esc(&fmt_eur(a.ein.brutto))), "", "");
+        h += &kpi("out", "Ausgaben", &fmt_eur(a.aus.netto), &format!("netto · brutto {}", esc(&fmt_eur(a.aus.brutto))), "", "");
+        h += &kpi("wallet", "Gewinn", &fmt_eur(a.gewinn()), "vereinfacht, netto", if a.gewinn() < 0 { "warn" } else { "good" }, "");
         if !ku {
-            h += &kpi("USt.-Zahllast", &fmt_eur(a.zahllast()), &format!("USt. {} − VSt. {}", esc(&fmt_eur(a.ein.steuer)), esc(&fmt_eur(a.aus.steuer))), "", "");
+            h += &kpi("landmark", "USt.-Zahllast", &fmt_eur(a.zahllast()), &format!("USt. {} − VSt. {}", esc(&fmt_eur(a.ein.steuer)), esc(&fmt_eur(a.aus.steuer))), "", "");
         }
         h += "</section>";
 
@@ -1414,10 +1424,10 @@ impl App {
         let ueber: Vec<&&Dokument> = offen.iter().filter(|x| x.ueberfaellig(&heute)).collect();
         let mut h = head("Mahnwesen", "Überfällige Rechnungen im Blick behalten und mahnen", &btn("set-tab", "settings", "Stufen & Texte", "ghost", None, "mahnung"), false);
         h += "<section class=\"kpis\">";
-        h += &kpi("Zu mahnen", &zu.len().to_string(), &esc(&fmt_eur(zu.iter().map(|x| x.rest()).sum())), if zu.is_empty() { "" } else { "warn" }, "");
-        h += &kpi("Überfällig", &ueber.len().to_string(), &esc(&fmt_eur(ueber.iter().map(|x| x.rest()).sum())), "", "");
-        h += &kpi("Bereits gemahnt", &gemahnt.len().to_string(), "offene Rechnungen mit Mahnung", "", "");
-        h += &kpi("Offene Mahnkosten", &fmt_eur(gemahnt.iter().map(|x| x.mahnkosten()).sum()), "Gebühren und Zinsen", "", "");
+        h += &kpi("bell", "Zu mahnen", &zu.len().to_string(), &esc(&fmt_eur(zu.iter().map(|x| x.rest()).sum())), if zu.is_empty() { "" } else { "warn" }, "");
+        h += &kpi("clock", "Überfällig", &ueber.len().to_string(), &esc(&fmt_eur(ueber.iter().map(|x| x.rest()).sum())), "", "");
+        h += &kpi("alert", "Bereits gemahnt", &gemahnt.len().to_string(), "offene Rechnungen mit Mahnung", "", "");
+        h += &kpi("receipt", "Offene Mahnkosten", &fmt_eur(gemahnt.iter().map(|x| x.mahnkosten()).sum()), "Gebühren und Zinsen", "", "");
         h += "</section>";
         let mut liste: Vec<&&Dokument> = ueber.clone();
         liste.sort_by(|a, b| (!a.zu_mahnen(&heute), a.faellig.as_str()).cmp(&(!b.zu_mahnen(&heute), b.faellig.as_str())));
