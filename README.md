@@ -30,13 +30,13 @@ Kunden, Aufträge, Angebote, Rechnungen und Finanzen an einem Ort – **komplett
 - **Per E-Mail senden**: PDF wird angehängt, Empfänger, Betreff und Text sind vorausgefüllt (Gmail, Outlook,
   Samsung E-Mail …) – oder an WhatsApp/Drive teilen; PDF ansehen oder in *Download/WWP* speichern
 - Fortlaufende Nummern je Jahr (AN-2026-0001, RE-2026-0001), Präfixe einstellbar
-- **Ablauf auf einen Blick**: Angebot → Auftragsbestätigung (optional) → Lieferschein (optional) → Rechnung.
-  Im Dokument und im Auftrag zeigt eine Schrittleiste, was schon da ist, was übersprungen wurde und was als
-  Nächstes kommt; „Erstellen“ übernimmt Kunde, Anschrift und Positionen. Duplizieren unter „Weitere Aktionen“
-- **Auftragsbestätigung** und **Lieferschein/Arbeitsnachweis** (ohne Preise) als eigene Dokumente mit Nummernkreis,
-  erstellt aus Angebot oder Auftrag; aus dem Lieferschein wird mit einem Tipp die Rechnung
+- **Ablauf auf einen Blick**: Angebot → Auftragsbestätigung → Rechnung. Im Dokument und im Auftrag zeigt eine
+  Schrittleiste, was schon da ist und was als Nächstes kommt; „Erstellen“ übernimmt Kunde, Anschrift und
+  Positionen. Duplizieren unter „Weitere Aktionen“
+- **Auftragsbestätigung** als eigenes Dokument mit Nummernkreis, erstellt aus Angebot oder Auftrag; daraus wird
+  mit einem Tipp die Rechnung
 - **Unterschrift per S-Pen**: Der Kunde unterschreibt direkt auf dem Tablet (Druckstufen, Handballen wird
-  ignoriert) – Angebot angenommen, Auftrag bestätigt oder Leistung abgenommen; die Unterschrift erscheint als
+  ignoriert) – Angebot angenommen oder Auftrag bestätigt; die Unterschrift erscheint als
   Vektor-Tinte mit Ort, Datum und Name im PDF, der Auftrag läuft automatisch mit
 - **E-Rechnung**: Rechnungs-PDFs sind PDF/A-3 mit eingebetteten Rechnungsdaten nach EN 16931 (**ZUGFeRD/Factur-X**);
   zusätzlich **XRechnung 3.0** als XML-Datei (z. B. für Behörden mit Leitweg-ID). Vor dem Versand werden die
@@ -74,7 +74,7 @@ Kunden, Aufträge, Angebote, Rechnungen und Finanzen an einem Ort – **komplett
 
 **Bedienung**
 - Seitenleiste mit eigenem Menüpunkt für jeden Bereich: Übersicht, Kunden, Aufträge, Kalender, Angebote,
-  Auftragsbestätigungen, Lieferscheine, Rechnungen, Mahnwesen, Finanzen, Leistungskatalog
+  Auftragsbestätigungen, Rechnungen, Mahnwesen, Finanzen, Leistungskatalog
 - Reihenfolge der Seitenleiste selbst festlegen (am Griff ziehen oder Pfeile) und Menüpunkte ausblenden –
   über das Griff-Symbol neben „Einstellungen“ oder Einstellungen → Darstellung
 - Mahnwesen-Seite mit allen überfälligen Rechnungen, nächster Mahnstufe und Verlauf aller Mahnungen

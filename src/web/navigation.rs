@@ -14,7 +14,6 @@ pub const NAV: &[(&str, &str, &str)] = &[
     ("kalender", "calendar", "Kalender"),
     ("angebote", "file", "Angebote"),
     ("ab", "check", "Auftragsbestätigungen"),
-    ("lieferscheine", "pen", "Lieferscheine"),
     ("rechnungen", "receipt", "Rechnungen"),
     ("mahnungen", "bell", "Mahnwesen"),
     ("finanzen", "wallet", "Finanzen"),
@@ -29,7 +28,6 @@ pub fn ziel(key: &str) -> View {
         "kalender" => View::Kalender,
         "angebote" => View::Dokumente(DokArt::Angebot),
         "ab" => View::Dokumente(DokArt::Auftragsbestaetigung),
-        "lieferscheine" => View::Dokumente(DokArt::Lieferschein),
         "rechnungen" => View::Dokumente(DokArt::Rechnung),
         "mahnungen" => View::Mahnwesen,
         "finanzen" => View::Finanzen,
@@ -43,7 +41,7 @@ fn art_key(art: DokArt) -> &'static str {
     match art {
         DokArt::Angebot => "angebote",
         DokArt::Auftragsbestaetigung => "ab",
-        DokArt::Lieferschein => "lieferscheine",
+        DokArt::Lieferschein => "ab",
         DokArt::Rechnung => "rechnungen",
     }
 }

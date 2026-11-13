@@ -16,9 +16,9 @@ der Stand wird im GitHub-Project-Board verfolgt.
 | [#11](https://github.com/CyrexMV/WWP/issues/11) | ✅ Unterschrift per S-Pen, Auftragsbestätigung und Lieferschein | Rechnungen, Aufträge |
 | [#28](https://github.com/CyrexMV/WWP/issues/28) | ✅ Buttons modernisieren | Design |
 | – | ✅ Einstellungen neu gestaltet (Bereiche, Live-Vorschau, Einrichtungsstand) | Design |
-| – | ✅ Eigene Menüpunkte für Auftragsbestätigungen, Lieferscheine, Mahnwesen und Leistungskatalog | Design |
+| – | ✅ Eigene Menüpunkte für Auftragsbestätigungen, Mahnwesen und Leistungskatalog | Design |
 | – | ✅ Seitenleiste anpassbar: Reihenfolge per Ziehen/Pfeilen, Menüpunkte ein- und ausblenden | Design |
-| – | ✅ Ablauf vereinfacht: Schrittleiste Angebot → Bestätigung → Lieferschein → Rechnung, aufgeräumte Aktionen | Design |
+| – | ✅ Ablauf vereinfacht: Schrittleiste Angebot → Bestätigung → Rechnung, aufgeräumte Aktionen; Lieferscheine entfernt | Design |
 
 ## Priorität hoch
 
