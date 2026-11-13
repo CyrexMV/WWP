@@ -7,7 +7,8 @@
 
 use super::date;
 use super::image;
-use super::model::{Data, DokArt, Dokument, Firma, Kunde};
+use super::girocode;
+use super::model::{briefanrede, Data, DokArt, Dokument, Firma, Kunde};
 use super::money::{fmt_eur, fmt_num, fmt_qty, Cents};
 use super::report::Auswertung;
 use miniz_oxide::deflate::compress_to_vec_zlib;
@@ -462,26 +463,11 @@ fn table_header(c: &mut Canvas, y: f32, cols: &Cols, accent: [f32; 3]) -> f32 {
     y + 7.0
 }
 
-/// Angebot oder Rechnung als PDF.
-pub fn dokument_pdf(data: &Data, doc: &Dokument, logo: Option<&[u8]>) -> Vec<u8> {
-    let f = &data.firma;
-    let kunde: Option<&Kunde> = data.kunde(doc.kunde_id);
+/// Briefkopf: Logo bzw. Firmenname, Absenderzeile, Anschriftfeld und Infoblock.
+/// Liefert die y-Position (mm), ab der der Brieftext beginnen kann.
+fn briefkopf(c: &mut Canvas, f: &Firma, logo: Option<&[u8]>, empfaenger: &str, info: &[(String, String)]) -> f32 {
     let accent = hex_color(&f.farbe);
-    let sum = doc.summen();
-    let mixed = !doc.kleinunternehmer && {
-        let mut r: Vec<u8> = doc.positionen.iter().map(|p| p.ust).collect();
-        r.sort_unstable();
-        r.dedup();
-        r.len() > 1
-    };
-    let cols = columns(mixed);
-    let logo = logo.filter(|b| image::is_png(b) || image::is_jpeg(b));
-
-    let mut pages: Vec<Canvas> = Vec::new();
-    let mut c = Canvas::default();
-    fold_marks(&mut c);
-
-    // --- Kopf: Logo bzw. Firmenname -------------------------------------
+    fold_marks(c);
     let mut logo_drawn = false;
     if let Some(bytes) = logo {
         if let Some((w, h)) = logo_box(bytes, f.logo_breite_mm.clamp(15.0, 90.0), 28.0) {
@@ -495,8 +481,6 @@ pub fn dokument_pdf(data: &Data, doc: &Dokument, logo: Option<&[u8]>) -> Vec<u8>
             c.text_right(RIGHT, 28.0, 9.0, false, GRAY, f.zusatz.trim());
         }
     }
-
-    // --- Anschriftfeld ----------------------------------------------------
     let abs = f.absenderzeile();
     if !abs.is_empty() {
         let line = wrap(&abs, 80.0, 7.0, false).into_iter().next().unwrap_or_default();
@@ -504,51 +488,169 @@ pub fn dokument_pdf(data: &Data, doc: &Dokument, logo: Option<&[u8]>) -> Vec<u8>
         c.line(LEFT, 50.2, LEFT + (text_width(&line, 7.0, false) / MM).min(80.0), 50.2, 0.3, GRAY);
     }
     let mut y = 57.0;
-    for l in doc.empfaenger.lines().take(7) {
+    for l in empfaenger.lines().take(7) {
         for part in wrap(l, 80.0, 10.0, false).into_iter().take(2) {
             c.text(LEFT, y, 10.0, false, BLACK, &part);
             y += 4.6;
         }
     }
-
-    // --- Infoblock -------------------------------------------------------
-    let mut info: Vec<(&str, String)> = Vec::new();
-    let nr_label = match doc.art {
-        DokArt::Angebot => "Angebotsnr.",
-        DokArt::Rechnung => "Rechnungsnr.",
-    };
-    info.push((nr_label, doc.nummer.clone()));
-    info.push(("Datum", date::german(&doc.datum)));
-    if let Some(k) = kunde {
-        if !k.nr.is_empty() {
-            info.push(("Kundennr.", k.nr.clone()));
-        }
-        if !k.ust_id.trim().is_empty() {
-            info.push(("Ihre USt-IdNr.", k.ust_id.trim().to_string()));
-        }
-    }
-    if !doc.leistung.trim().is_empty() {
-        info.push((if doc.art == DokArt::Rechnung { "Leistungsdatum" } else { "Ausführung" }, doc.leistung.trim().to_string()));
-    }
-    if !doc.faellig.is_empty() {
-        match doc.art {
-            DokArt::Angebot => info.push(("Gültig bis", date::german(&doc.faellig))),
-            DokArt::Rechnung if doc.storno_von.is_none() => info.push(("Zahlbar bis", date::german(&doc.faellig))),
-            _ => {}
-        }
-    }
-    if let Some(orig) = data.dokument(doc.storno_von) {
-        info.push(("Storno zu", orig.nummer.clone()));
-    }
     let mut iy = 57.0;
-    for (k, v) in &info {
+    for (k, v) in info {
         c.text(125.0, iy, 8.5, false, GRAY, k);
         c.text_right(RIGHT, iy, 8.5, false, BLACK, v);
         iy += 4.8;
     }
+    103.0f32.max(iy + 6.0)
+}
+
+/// Neue Seite beginnen; liefert die obere Textkante.
+fn new_page(pages: &mut Vec<Canvas>, c: &mut Canvas) -> f32 {
+    pages.push(std::mem::take(c));
+    25.0
+}
+
+/// Fließtext mit Seitenumbruch.
+fn absatz(pages: &mut Vec<Canvas>, c: &mut Canvas, mut y: f32, text: &str) -> f32 {
+    for l in wrap(text.trim_end(), RIGHT - LEFT, 10.0, false) {
+        if y > BOTTOM + 2.0 {
+            y = new_page(pages, c);
+        }
+        c.text(LEFT, y, 10.0, false, BLACK, &l);
+        y += 4.9;
+    }
+    y
+}
+
+/// Grußformel.
+fn gruss(pages: &mut Vec<Canvas>, c: &mut Canvas, mut y: f32, f: &Firma) -> f32 {
+    let mut tail = vec!["Mit freundlichen Grüßen".to_string()];
+    if !f.name.trim().is_empty() {
+        tail.push(f.name.trim().to_string());
+    }
+    if y + 10.0 > BOTTOM + 2.0 {
+        y = new_page(pages, c);
+    }
+    for l in tail {
+        c.text(LEFT, y, 10.0, false, BLACK, &l);
+        y += 4.9;
+    }
+    y
+}
+
+/// Kantenlänge des GiroCodes (mm).
+const QR_SIZE: f32 = 26.0;
+
+/// GiroCode-Inhalt für einen Betrag, falls eingeschaltet und die Bankdaten gültig sind.
+fn giro_payload(f: &Firma, betrag: Cents, zweck: &str) -> Option<String> {
+    if !f.girocode {
+        return None;
+    }
+    girocode::epc_payload(&f.name, &f.iban, &f.bic, betrag, zweck)
+}
+
+/// GiroCode mit Beschriftung zeichnen (obere linke Ecke x/y); liefert die Unterkante.
+fn girocode_block(c: &mut Canvas, x: f32, y: f32, payload: &str) -> Option<f32> {
+    let m = girocode::matrix(payload)?;
+    let n = m.len() as f32;
+    let mod_mm = QR_SIZE / n;
+    let mut path = String::new();
+    for (row, cells) in m.iter().enumerate() {
+        let mut col = 0;
+        while col < cells.len() {
+            if !cells[col] {
+                col += 1;
+                continue;
+            }
+            let start = col;
+            while col < cells.len() && cells[col] {
+                col += 1;
+            }
+            let px = (x + start as f32 * mod_mm) * MM;
+            let py = (PAGE_H - y - (row + 1) as f32 * mod_mm) * MM;
+            // minimal überlappen, damit keine Haarlinien zwischen den Modulen entstehen
+            let _ = write!(path, "{} {} {} {} re ", n4(px), n4(py), n4((col - start) as f32 * mod_mm * MM + 0.05), n4(mod_mm * MM + 0.05));
+        }
+    }
+    let _ = writeln!(c.c, "0 0 0 rg {}f", path);
+    c.text(x, y + QR_SIZE + 3.6, 7.0, true, BLACK, "Bezahlen per Banking-App");
+    c.text(x, y + QR_SIZE + 6.6, 6.8, false, GRAY, "GiroCode scannen – Daten sind ausgefüllt");
+    Some(y + QR_SIZE + 7.5)
+}
+
+fn n4(v: f32) -> String {
+    let s = format!("{:.3}", v);
+    let s = s.trim_end_matches('0').trim_end_matches('.');
+    if s.is_empty() || s == "-0" {
+        "0".into()
+    } else {
+        s.to_string()
+    }
+}
+
+/// Summenzeile im rechten Bereich.
+fn summe_zeile(c: &mut Canvas, lx: f32, y: f32, label: &str, wert: &str) {
+    c.text(lx, y, 9.5, false, BLACK, label);
+    c.text_right(RIGHT - 1.5, y, 9.5, false, BLACK, wert);
+}
+
+/// Hervorgehobene Endsumme.
+fn summe_total(c: &mut Canvas, lx: f32, y: f32, label: &str, wert: &str, accent: [f32; 3]) {
+    c.rect(lx - 2.0, y - 4.6, RIGHT - lx + 2.0, 7.4, mix_white(accent, 0.12));
+    c.line(lx - 2.0, y - 4.6, RIGHT, y - 4.6, 0.8, accent);
+    c.text(lx, y + 0.3, 10.5, true, BLACK, label);
+    c.text_right(RIGHT - 1.5, y + 0.3, 10.5, true, BLACK, wert);
+}
+
+/// Seiten eines Angebots / einer Rechnung (mit Fußzeilen).
+fn dokument_seiten(data: &Data, doc: &Dokument, logo: Option<&[u8]>) -> Vec<Canvas> {
+    let f = &data.firma;
+    let kunde: Option<&Kunde> = data.kunde(doc.kunde_id);
+    let accent = hex_color(&f.farbe);
+    let sum = doc.summen();
+    let mixed = !doc.kleinunternehmer && {
+        let mut r: Vec<u8> = doc.positionen.iter().map(|p| p.ust).collect();
+        r.sort_unstable();
+        r.dedup();
+        r.len() > 1
+    };
+    let cols = columns(mixed);
+
+    let mut pages: Vec<Canvas> = Vec::new();
+    let mut c = Canvas::default();
+
+    // --- Kopf -------------------------------------------------------------
+    let mut info: Vec<(String, String)> = Vec::new();
+    let nr_label = match doc.art {
+        DokArt::Angebot => "Angebotsnr.",
+        DokArt::Rechnung => "Rechnungsnr.",
+    };
+    info.push((nr_label.into(), doc.nummer.clone()));
+    info.push(("Datum".into(), date::german(&doc.datum)));
+    if let Some(k) = kunde {
+        if !k.nr.is_empty() {
+            info.push(("Kundennr.".into(), k.nr.clone()));
+        }
+        if !k.ust_id.trim().is_empty() {
+            info.push(("Ihre USt-IdNr.".into(), k.ust_id.trim().to_string()));
+        }
+    }
+    if !doc.leistung.trim().is_empty() {
+        let l = if doc.art == DokArt::Rechnung { "Leistungsdatum" } else { "Ausführung" };
+        info.push((l.into(), doc.leistung.trim().to_string()));
+    }
+    if !doc.faellig.is_empty() {
+        match doc.art {
+            DokArt::Angebot => info.push(("Gültig bis".into(), date::german(&doc.faellig))),
+            DokArt::Rechnung if doc.storno_von.is_none() => info.push(("Zahlbar bis".into(), date::german(&doc.faellig))),
+            _ => {}
+        }
+    }
+    if let Some(orig) = data.dokument(doc.storno_von) {
+        info.push(("Storno zu".into(), orig.nummer.clone()));
+    }
+    let mut y = briefkopf(&mut c, f, logo, &doc.empfaenger, &info);
 
     // --- Titel, Betreff, Einleitung ----------------------------------------
-    let mut y = 103.0f32.max(iy + 6.0);
     c.text(LEFT, y, 16.0, true, BLACK, &format!("{} {}", doc.titel(), doc.nummer));
     y += 7.0;
     if !doc.betreff.trim().is_empty() {
@@ -558,22 +660,10 @@ pub fn dokument_pdf(data: &Data, doc: &Dokument, logo: Option<&[u8]>) -> Vec<u8>
         }
     }
     y += 3.0;
-    let einleitung = doc.fill(&doc.einleitung, f, kunde);
-    for l in wrap(einleitung.trim_end(), RIGHT - LEFT, 10.0, false) {
-        if y > BOTTOM {
-            pages.push(std::mem::take(&mut c));
-            y = 25.0;
-        }
-        c.text(LEFT, y, 10.0, false, BLACK, &l);
-        y += 4.9;
-    }
+    y = absatz(&mut pages, &mut c, y, &doc.fill(&doc.einleitung, f, kunde));
     y += 4.0;
 
     // --- Positionen --------------------------------------------------------
-    let new_page = |pages: &mut Vec<Canvas>, c: &mut Canvas| -> f32 {
-        pages.push(std::mem::take(c));
-        25.0
-    };
     if y + 20.0 > BOTTOM {
         y = new_page(&mut pages, &mut c);
     }
@@ -626,17 +716,22 @@ pub fn dokument_pdf(data: &Data, doc: &Dokument, logo: Option<&[u8]>) -> Vec<u8>
         c.line(LEFT, y, RIGHT, y, 0.35, LINE);
     }
 
-    // --- Summen -------------------------------------------------------------
+    // --- Summen (+ GiroCode links daneben) -----------------------------------
+    let qr = if doc.art == DokArt::Rechnung && doc.storno_von.is_none() {
+        giro_payload(f, sum.brutto, &format!("Rechnung {}", doc.nummer))
+    } else {
+        None
+    };
     let rows = 2 + sum.steuern.len();
-    if y + rows as f32 * 6.0 + 10.0 > BOTTOM {
+    let block_h = (rows as f32 * 6.0 + 10.0).max(if qr.is_some() { QR_SIZE + 12.0 } else { 0.0 });
+    if y + block_h > BOTTOM {
         y = new_page(&mut pages, &mut c);
     }
     y += 6.0;
+    let qr_bottom = qr.as_deref().and_then(|p| girocode_block(&mut c, LEFT, y - 3.5, p));
     let lx = 118.0;
-    let show_net = !sum.steuern.is_empty();
-    if show_net {
-        c.text(lx, y, 9.5, false, BLACK, "Summe netto");
-        c.text_right(RIGHT - 1.5, y, 9.5, false, BLACK, &fmt_eur(sum.netto));
+    if !sum.steuern.is_empty() {
+        summe_zeile(&mut c, lx, y, "Summe netto", &fmt_eur(sum.netto));
         y += 5.2;
         for (rate, basis, tax) in &sum.steuern {
             let label = if sum.steuern.len() > 1 {
@@ -644,49 +739,147 @@ pub fn dokument_pdf(data: &Data, doc: &Dokument, logo: Option<&[u8]>) -> Vec<u8>
             } else {
                 format!("zzgl. {} % USt.", rate)
             };
-            c.text(lx, y, 9.5, false, BLACK, &label);
-            c.text_right(RIGHT - 1.5, y, 9.5, false, BLACK, &fmt_eur(*tax));
+            summe_zeile(&mut c, lx, y, &label, &fmt_eur(*tax));
             y += 5.2;
         }
     }
     y += 0.6;
-    c.rect(lx - 2.0, y - 4.6, RIGHT - lx + 2.0, 7.4, mix_white(accent, 0.12));
-    c.line(lx - 2.0, y - 4.6, RIGHT, y - 4.6, 0.8, accent);
-    c.text(lx, y + 0.3, 10.5, true, BLACK, if doc.art == DokArt::Angebot { "Angebotssumme" } else { "Gesamtbetrag" });
-    c.text_right(RIGHT - 1.5, y + 0.3, 10.5, true, BLACK, &fmt_eur(sum.brutto));
+    let total_label = if doc.art == DokArt::Angebot { "Angebotssumme" } else { "Gesamtbetrag" };
+    summe_total(&mut c, lx, y, total_label, &fmt_eur(sum.brutto), accent);
     y += 10.0;
     if doc.kleinunternehmer {
-        c.text(LEFT, y, 8.5, false, GRAY, "Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.");
+        c.text(lx - 2.0, y, 8.0, false, GRAY, "Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.");
         y += 6.0;
+    }
+    if let Some(b) = qr_bottom {
+        y = y.max(b + 5.0);
     }
 
     // --- Schlusstext, Gruß ---------------------------------------------------
-    let schluss = doc.fill(&doc.schluss, f, kunde);
-    let mut tail: Vec<String> = Vec::new();
-    if !schluss.trim().is_empty() {
-        tail.extend(wrap(schluss.trim_end(), RIGHT - LEFT, 10.0, false));
-        tail.push(String::new());
-    }
-    tail.push("Mit freundlichen Grüßen".into());
-    if !f.name.trim().is_empty() {
-        tail.push(f.name.trim().to_string());
-    }
     y += 2.0;
-    for l in tail {
-        if y > BOTTOM + 2.0 {
-            y = new_page(&mut pages, &mut c);
-        }
-        c.text(LEFT, y, 10.0, false, BLACK, &l);
+    let schluss = doc.fill(&doc.schluss, f, kunde);
+    if !schluss.trim().is_empty() {
+        y = absatz(&mut pages, &mut c, y, &schluss);
         y += 4.9;
     }
+    gruss(&mut pages, &mut c, y, f);
     pages.push(c);
 
     let total = pages.len();
     for (i, p) in pages.iter_mut().enumerate() {
         footer(p, f, i + 1, total);
     }
-    let title = format!("{} {}", doc.titel(), doc.nummer);
-    assemble(pages, logo, &title, &f.name)
+    pages
+}
+
+/// Angebot oder Rechnung als PDF.
+pub fn dokument_pdf(data: &Data, doc: &Dokument, logo: Option<&[u8]>) -> Vec<u8> {
+    let logo = logo.filter(|b| image::is_png(b) || image::is_jpeg(b));
+    let pages = dokument_seiten(data, doc, logo);
+    assemble(pages, logo, &format!("{} {}", doc.titel(), doc.nummer), &data.firma.name)
+}
+
+// ---------------------------------------------------------------------------
+// Zahlungserinnerung / Mahnung
+// ---------------------------------------------------------------------------
+
+/// Mahnschreiben (Index `idx` in `doc.mahnungen`) mit angehängter Rechnungskopie.
+pub fn mahnung_pdf(data: &Data, doc: &Dokument, idx: usize, logo: Option<&[u8]>) -> Option<Vec<u8>> {
+    let m = doc.mahnungen.get(idx)?;
+    let f = &data.firma;
+    let kunde = data.kunde(doc.kunde_id);
+    let accent = hex_color(&f.farbe);
+    let logo = logo.filter(|b| image::is_png(b) || image::is_jpeg(b));
+    let brutto = doc.summen().brutto;
+    let bisherige: Cents = doc.mahnungen[..idx].iter().map(|x| x.gebuehr + x.zinsen).sum();
+    let bezahlt = (brutto + bisherige - m.offen_vorher).max(0);
+
+    let mut pages: Vec<Canvas> = Vec::new();
+    let mut c = Canvas::default();
+    let mut info: Vec<(String, String)> = vec![
+        ("Rechnungsnr.".into(), doc.nummer.clone()),
+        ("Rechnungsdatum".into(), date::german(&doc.datum)),
+    ];
+    if let Some(k) = kunde {
+        if !k.nr.is_empty() {
+            info.push(("Kundennr.".into(), k.nr.clone()));
+        }
+    }
+    info.push(("Datum".into(), date::german(&m.datum)));
+    info.push(("Zahlbar bis".into(), date::german(&m.frist)));
+    let mut y = briefkopf(&mut c, f, logo, &doc.empfaenger, &info);
+
+    c.text(LEFT, y, 16.0, true, BLACK, m.label());
+    y += 7.0;
+    c.text(LEFT, y, 10.5, true, BLACK, &format!("Rechnung {} vom {}", doc.nummer, date::german(&doc.datum)));
+    y += 8.0;
+    let anrede = kunde.map(briefanrede).unwrap_or_else(|| "Sehr geehrte Damen und Herren,".into());
+    y = absatz(&mut pages, &mut c, y, &anrede);
+    y += 4.9;
+    let text = doc.fill_mahnung(&f.mahnstufe(m.stufe).2, f, kunde, m);
+    y = absatz(&mut pages, &mut c, y, &text);
+    y += 6.0;
+
+    // Aufstellung
+    let mut zeilen: Vec<(String, Cents)> = vec![(format!("Rechnungsbetrag (fällig seit {})", date::german(&doc.faellig)), brutto)];
+    if bisherige > 0 {
+        zeilen.push(("Mahnkosten aus früheren Schreiben".into(), bisherige));
+    }
+    if bezahlt > 0 {
+        zeilen.push(("abzüglich bereits gezahlt".into(), -bezahlt));
+    }
+    if m.gebuehr > 0 {
+        zeilen.push(("Mahngebühr".into(), m.gebuehr));
+    }
+    if m.zinsen > 0 {
+        let satz = format!("{:.2}", m.zins_satz).replace('.', ",");
+        zeilen.push((format!("Verzugszinsen ({satz} % p. a., {} Tage)", m.zins_tage), m.zinsen));
+    }
+    let qr = giro_payload(f, m.gesamt(), &format!("Rechnung {}", doc.nummer));
+    let block_h = (zeilen.len() as f32 * 5.2 + 14.0).max(if qr.is_some() { QR_SIZE + 12.0 } else { 0.0 });
+    if y + block_h > BOTTOM {
+        y = new_page(&mut pages, &mut c);
+    }
+    let qr_bottom = qr.as_deref().and_then(|p| girocode_block(&mut c, LEFT, y - 3.5, p));
+    let lx = if qr.is_some() { 62.0 } else { 100.0 };
+    for (l, v) in &zeilen {
+        summe_zeile(&mut c, lx, y, l, &fmt_eur(*v));
+        y += 5.2;
+    }
+    y += 0.6;
+    summe_total(&mut c, lx, y, "Zu zahlender Betrag", &fmt_eur(m.gesamt()), accent);
+    y += 10.0;
+    if let Some(b) = qr_bottom {
+        y = y.max(b + 5.0);
+    }
+    if !f.iban.trim().is_empty() {
+        let bank = format!(
+            "Bankverbindung: {}{}IBAN {}{} · Verwendungszweck: Rechnung {}",
+            f.bank.trim(),
+            if f.bank.trim().is_empty() { "" } else { " · " },
+            f.iban.trim(),
+            if f.bic.trim().is_empty() { String::new() } else { format!(" · BIC {}", f.bic.trim()) },
+            doc.nummer
+        );
+        for l in wrap(&bank, RIGHT - LEFT, 8.5, false) {
+            c.text(LEFT, y, 8.5, false, GRAY, &l);
+            y += 4.2;
+        }
+        y += 3.0;
+    }
+    y += 2.0;
+    gruss(&mut pages, &mut c, y, f);
+    pages.push(c);
+    let total = pages.len();
+    for (i, p) in pages.iter_mut().enumerate() {
+        footer(p, f, i + 1, total);
+    }
+    // Rechnungskopie anhängen
+    for mut p in dokument_seiten(data, doc, logo) {
+        p.text_right(RIGHT, 8.0, 9.0, true, GRAY, "KOPIE");
+        pages.push(p);
+    }
+    Some(assemble(pages, logo, &format!("{} zu Rechnung {}", m.label(), doc.nummer), &f.name))
 }
 
 // ---------------------------------------------------------------------------
@@ -898,6 +1091,29 @@ mod tests {
         let s = String::from_utf8_lossy(&bytes);
         assert!(s.contains("/Logo"));
         assert!(s.contains("/SMask"));
+    }
+
+    #[test]
+    fn girocode_and_dunning_letter() {
+        let (mut d, r) = sample();
+        d.firma.bic = "SSKMDEMMXXX".into();
+        d.dokument_mut(r).unwrap().status = DokStatus::Versendet;
+        let doc = d.dokument(Some(r)).unwrap().clone();
+        let with_qr = dokument_pdf(&d, &doc, None);
+        d.firma.girocode = false;
+        let without = dokument_pdf(&d, &doc, None);
+        assert!(with_qr.len() > without.len(), "GiroCode fehlt im PDF");
+        d.firma.girocode = true;
+        let i = d.mahnung_erstellen(r, 1, "2026-12-01", "2026-12-11", 500, true).unwrap();
+        d.zahlung_erfassen(r, "2026-12-05", 1_000, "Bar");
+        let doc = d.dokument(Some(r)).unwrap().clone();
+        let pdf = mahnung_pdf(&d, &doc, i, None).unwrap();
+        let s = String::from_utf8_lossy(&pdf);
+        assert!(pdf.starts_with(b"%PDF"));
+        // Mahnschreiben + Rechnungskopie (mehrseitig)
+        let count: usize = s.split("/Count ").nth(1).unwrap().split(' ').next().unwrap().parse().unwrap();
+        assert!(count >= 4, "Seiten: {count}");
+        assert!(mahnung_pdf(&d, &doc, 5, None).is_none());
     }
 
     #[test]

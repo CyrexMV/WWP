@@ -217,9 +217,10 @@ impl App {
         let jahr = date::year(&heute).unwrap_or(2026);
         let a = report::auswertung(d, jahr);
         let offen: Vec<&Dokument> = d.dokumente.iter().filter(|x| x.offen()).collect();
-        let offen_sum: Cents = offen.iter().map(|x| x.summen().brutto).sum();
+        let offen_sum: Cents = offen.iter().map(|x| x.rest()).sum();
         let ueber: Vec<&&Dokument> = offen.iter().filter(|x| x.ueberfaellig(&heute)).collect();
-        let ueber_sum: Cents = ueber.iter().map(|x| x.summen().brutto).sum();
+        let ueber_sum: Cents = ueber.iter().map(|x| x.rest()).sum();
+        let zu_mahnen = offen.iter().filter(|x| x.zu_mahnen(&heute)).count();
         let angebote: Vec<&Dokument> = d.dokumente.iter().filter(|x| x.art == DokArt::Angebot && x.status == DokStatus::Versendet).collect();
         let angebote_sum: Cents = angebote.iter().map(|x| x.summen().netto).sum();
         let aktiv = d.auftraege.iter().filter(|x| matches!(x.status, AuftragStatus::Beauftragt | AuftragStatus::InArbeit)).count();
@@ -252,10 +253,16 @@ impl App {
             &if ueber.is_empty() {
                 format!("{} offen", offen.len())
             } else {
-                format!("{} offen · <b class=\"neg\">{} überfällig ({})</b>", offen.len(), ueber.len(), esc(&fmt_eur(ueber_sum)))
+                format!(
+                    "{} offen · <b class=\"neg\">{} überfällig ({})</b>{}",
+                    offen.len(),
+                    ueber.len(),
+                    esc(&fmt_eur(ueber_sum)),
+                    if zu_mahnen > 0 { format!("<br>{zu_mahnen} zu mahnen") } else { String::new() }
+                )
             },
             if ueber.is_empty() { "" } else { "warn" },
-            "kpi-offen",
+            if zu_mahnen > 0 { "kpi-mahnen" } else { "kpi-offen" },
         );
         h += &kpi(&format!("Einnahmen {jahr}"), &fmt_eur(a.ein.netto), "netto, bezahlt", "", "nav-fin");
         h += &kpi(&format!("Ausgaben {jahr}"), &fmt_eur(a.aus.netto), "netto", "", "nav-fin");
@@ -287,13 +294,17 @@ impl App {
                 } else {
                     format!("fällig in {tage} Tagen")
                 };
+                let stufe = r.letzte_mahnung().map(|m| format!(" · {}", m.label())).unwrap_or_default();
+                let mahnen = if r.zu_mahnen(&heute) { badge("ueberfaellig", "mahnen") } else { String::new() };
                 h += &format!(
-                    "<button class=\"row\" data-act=\"dok-open\" data-id=\"{}\"><div><b>{}</b><span>{} · {}</span></div><strong>{}</strong></button>",
+                    "<button class=\"row\" data-act=\"dok-open\" data-id=\"{}\"><div><b>{}</b><span>{} · {}{}</span></div><div class=\"row-r\">{}<strong>{}</strong></div></button>",
                     r.id,
                     esc(&d.kunden_name(r.kunde_id)),
                     esc(&r.nummer),
                     due,
-                    esc(&fmt_eur(r.summen().brutto))
+                    stufe,
+                    mahnen,
+                    esc(&fmt_eur(r.rest()))
                 );
             }
             h += "</div>";
@@ -650,6 +661,7 @@ impl App {
         match self.ui.dok_filter.as_str() {
             "" | "alle" => true,
             "offen" => x.offen(),
+            "zumahnen" => x.zu_mahnen(heute),
             "ueberfaellig" => x.ueberfaellig(heute),
             k => x.status.key() == k,
         }
@@ -719,7 +731,7 @@ impl App {
         }
         let filters: Vec<(&str, &str)> = match art {
             DokArt::Angebot => vec![("alle", "Alle"), ("entwurf", "Entwurf"), ("versendet", "Versendet"), ("angenommen", "Angenommen"), ("abgelehnt", "Abgelehnt")],
-            DokArt::Rechnung => vec![("alle", "Alle"), ("entwurf", "Entwurf"), ("offen", "Offen"), ("ueberfaellig", "Überfällig"), ("bezahlt", "Bezahlt"), ("storniert", "Storniert")],
+            DokArt::Rechnung => vec![("alle", "Alle"), ("entwurf", "Entwurf"), ("offen", "Offen"), ("ueberfaellig", "Überfällig"), ("zumahnen", "Zu mahnen"), ("bezahlt", "Bezahlt"), ("storniert", "Storniert")],
         };
         let cur = if self.ui.dok_filter.is_empty() { "alle" } else { self.ui.dok_filter.as_str() };
         h += "<div class=\"toolbar\"><div class=\"chips\">";
@@ -747,7 +759,17 @@ impl App {
                 let _ = write!(h, "<dt>{}</dt><dd>{}</dd>", label, fmt_eur(*t));
             }
         }
-        let _ = write!(h, "<dt class=\"total\">Gesamt</dt><dd class=\"total\">{}</dd></dl>", fmt_eur(s.brutto));
+        let _ = write!(h, "<dt class=\"total\">Gesamt</dt><dd class=\"total\">{}</dd>", fmt_eur(s.brutto));
+        if x.art == DokArt::Rechnung && (x.mahnkosten() > 0 || x.gezahlt() > 0) {
+            if x.mahnkosten() > 0 {
+                let _ = write!(h, "<dt>Mahngebühren/Zinsen</dt><dd>{}</dd>", fmt_eur(x.mahnkosten()));
+            }
+            if x.gezahlt() > 0 {
+                let _ = write!(h, "<dt>Bereits bezahlt</dt><dd class=\"plus\">− {}</dd>", fmt_eur(x.gezahlt()));
+            }
+            let _ = write!(h, "<dt class=\"rest\">Noch offen</dt><dd class=\"rest\">{}</dd>", fmt_eur(x.rest()));
+        }
+        h += "</dl>";
         if x.kleinunternehmer {
             h += "<p class=\"muted small\">Ohne Umsatzsteuer (§ 19 UStG)</p>";
         }
@@ -863,14 +885,15 @@ impl App {
                     h += &btn("dok-mark-sent", "check", "Als versendet markieren", "ghost block", Some(id), "");
                 }
                 if x.status == DokStatus::Versendet && x.storno_von.is_none() {
-                    h += &btn("dok-paid", "check", "Als bezahlt markieren", "success block", Some(id), "");
-                    if x.ueberfaellig(&heute) {
-                        h += &btn("dok-remind", "bell", "Zahlungserinnerung senden", "ghost block", Some(id), "");
+                    h += &btn("dok-paid", "check", "Zahlung erfassen", "success block", Some(id), "");
+                    if x.ueberfaellig(&heute) || !x.mahnungen.is_empty() {
+                        let label = format!("{} erstellen", MAHNSTUFEN[x.naechste_stufe() as usize]);
+                        h += &btn("mahn-new", "bell", &label, if x.zu_mahnen(&heute) { "primary block" } else { "ghost block" }, Some(id), "");
                     }
                 }
                 if x.status == DokStatus::Bezahlt {
                     h += &format!("<p class=\"paid\">{} Bezahlt am {}</p>", ic("check"), german(&x.bezahlt_am));
-                    h += &btn("dok-unpaid", "undo", "Zahlung zurücknehmen", "ghost block", Some(id), "");
+                    h += &btn("dok-unpaid", "undo", "Zahlungen zurücknehmen", "ghost block", Some(id), "");
                 }
                 if matches!(x.status, DokStatus::Versendet | DokStatus::Bezahlt) && x.storno_von.is_none() {
                     h += &btn("dok-storno", "x", "Stornieren", "ghost block", Some(id), "");
@@ -896,6 +919,42 @@ impl App {
             if x.kleinunternehmer { " checked" } else { "" }
         );
         h += "</div>";
+        // Zahlungen
+        if !x.zahlungen.is_empty() {
+            h += "<div class=\"card\"><div class=\"card-head\"><h2>Zahlungen</h2></div><div class=\"rows\">";
+            for z in &x.zahlungen {
+                let _ = write!(
+                    h,
+                    "<div class=\"row static\"><div><b class=\"plus\">{}</b><span>{}{}</span></div><button class=\"icon-btn sm danger-text\" data-act=\"zahlung-del\" data-id=\"{id}\" data-v=\"{}\" title=\"Zahlung löschen\">{}</button></div>",
+                    fmt_eur(z.betrag),
+                    german(&z.datum),
+                    if z.zahlart.is_empty() { String::new() } else { format!(" · {}", esc(&z.zahlart)) },
+                    z.id,
+                    ic("trash")
+                );
+            }
+            h += "</div></div>";
+        }
+        // Mahnungen
+        if !x.mahnungen.is_empty() {
+            h += "<div class=\"card\"><div class=\"card-head\"><h2>Mahnungen</h2></div><div class=\"rows\">";
+            for (i, m) in x.mahnungen.iter().enumerate() {
+                let kosten = if m.gebuehr + m.zinsen > 0 { format!(" · +{}", fmt_eur(m.gebuehr + m.zinsen)) } else { String::new() };
+                let _ = write!(
+                    h,
+                    "<div class=\"row static\"><div><b>{}</b><span>{} · Frist {}{}{}</span></div><div class=\"row-r\"><button class=\"icon-btn sm\" data-act=\"mahn-pdf\" data-id=\"{id}\" data-v=\"{i}\" title=\"Ansehen\">{}</button><button class=\"icon-btn sm\" data-act=\"mahn-send\" data-id=\"{id}\" data-v=\"{i}\" title=\"Senden\">{}</button><button class=\"icon-btn sm danger-text\" data-act=\"mahn-del\" data-id=\"{id}\" data-v=\"{i}\" title=\"Löschen\">{}</button></div></div>",
+                    m.label(),
+                    german(&m.datum),
+                    german(&m.frist),
+                    kosten,
+                    if m.versendet { " · versendet" } else { "" },
+                    ic("eye"),
+                    ic("send"),
+                    ic("trash")
+                );
+            }
+            h += "</div></div>";
+        }
         // Verknüpfungen
         let mut links = String::new();
         if let Some(k) = d.kunde(x.kunde_id) {
@@ -1180,6 +1239,7 @@ impl App {
         h += &text("Bank", "f.bank", &f.bank, "");
         h += &text("IBAN", "f.iban", &f.iban, "autocapitalize=\"characters\"");
         h += &text("BIC", "f.bic", &f.bic, "autocapitalize=\"characters\"");
+        let _ = write!(h, "<p class=\"hint wide\" id=\"iban-hint\">{}</p>", iban_hint(&f.iban));
         h += &text("Steuernummer", "f.steuernummer", &f.steuernummer, "");
         h += &text("USt-IdNr.", "f.ust_id", &f.ust_id, "");
         let _ = write!(
@@ -1190,6 +1250,11 @@ impl App {
         if !f.kleinunternehmer {
             h += &select_f("Standard-Steuersatz", "f.ust_standard", &ust_opts(), &f.ust_standard.to_string(), "");
         }
+        let _ = write!(
+            h,
+            "<label class=\"switch wide\"><input type=\"checkbox\" data-f=\"f.girocode\"{}><span>GiroCode (QR-Code zum Bezahlen) auf Rechnungen und Mahnungen</span></label>",
+            if f.girocode { " checked" } else { "" }
+        );
         h += "</div></div>";
 
         // Briefbogen
@@ -1218,6 +1283,27 @@ impl App {
         h += &text("Zahlungsziel (Tage)", "f.zahlungsziel", &f.zahlungsziel.to_string(), "inputmode=\"numeric\"");
         h += &text("Angebot gültig (Tage)", "f.angebot_gueltig", &f.angebot_gueltig.to_string(), "inputmode=\"numeric\"");
         h += "<p class=\"hint wide\">Nummern laufen je Jahr fortlaufend, z. B. RE-2026-0001.</p>";
+        h += "</div></div>";
+
+        // Mahnwesen
+        h += "<div class=\"card wide-card\"><div class=\"card-head\"><h2>Mahnwesen</h2></div><div class=\"form\">";
+        for (i, name) in MAHNSTUFEN.iter().enumerate() {
+            let (tage, gebuehr, text_) = f.mahnstufe(i as u8);
+            let _ = write!(h, "<h3 class=\"wide sub-h\">{name}</h3>");
+            h += &text("Neue Frist (Tage)", &format!("f.mahn_tage.{i}"), &tage.to_string(), "inputmode=\"numeric\"");
+            h += &money_f("Mahngebühr", &format!("f.mahn_gebuehr.{i}"), gebuehr, "placeholder=\"0,00\"");
+            h += &area("Text", &format!("f.mahn_text.{i}"), &text_, 3, "");
+        }
+        let _ = write!(
+            h,
+            "<label class=\"switch wide\"><input type=\"checkbox\" data-f=\"f.verzugszinsen\"{}><span>Verzugszinsen standardmäßig berechnen (Basiszinssatz + 5 Prozentpunkte für Privatkunden, + 9 für Geschäftskunden)</span></label>",
+            if f.verzugszinsen { " checked" } else { "" }
+        );
+        h += &text("Basiszinssatz (%)", "f.basiszins", &format!("{}", f.basiszins).replace('.', ","), "inputmode=\"decimal\"");
+        h += "<p class=\"hint\">Aktueller Wert: Deutsche Bundesbank, „Basiszinssatz“ – ändert sich zum 1. Januar und 1. Juli.</p>";
+        h += &text("E-Mail-Betreff Mahnung", "f.mail_betreff_mahnung", &f.mail_betreff_mahnung, "");
+        h += &area("E-Mail-Text Mahnung", "f.mail_text_mahnung", &f.mail_text_mahnung, 5, "");
+        h += "<p class=\"hint wide\">Platzhalter: {stufe} {nummer} {datum} {betrag} {faellig} {gesamt} {gebuehr} {frist} {firma} {ansprechpartner}. Die Briefanrede wird automatisch vorangestellt; die Rechnung wird als Kopie angehängt.</p>";
         h += "</div></div>";
 
         // Texte
@@ -1351,6 +1437,35 @@ impl App {
         self.modal(&h);
     }
 
+    /// Dialog „Mahnung erstellen“ (Stufe, Datum, Frist, Gebühr, Verzugszinsen).
+    pub fn mahn_modal(&mut self, id: Id, stufe: u8) {
+        let heute = today();
+        let Some(x) = self.data.dokument(Some(id)) else { return };
+        let f = &self.data.firma;
+        let (tage, gebuehr, _) = f.mahnstufe(stufe);
+        let (satz, ztage, zinsen) = self.data.verzugszinsen(id, &heute);
+        let mut opts = String::new();
+        for (i, l) in MAHNSTUFEN.iter().enumerate() {
+            let _ = write!(opts, "<option value=\"{i}\"{}>{l}</option>", if i as u8 == stufe { " selected" } else { "" });
+        }
+        let html = format!(
+            "<h3>Mahnung erstellen</h3><p class=\"muted\">Rechnung {} · fällig seit {} · offen <b>{}</b></p><div class=\"form\"><label class=\"field\"><span>Stufe</span><select id=\"mahn-stufe\" data-search=\"mahn-stufe\" data-id=\"{id}\">{opts}</select></label><label class=\"field\"><span>Datum</span><input type=\"date\" id=\"mahn-datum\" value=\"{heute}\"></label><label class=\"field\"><span>Neue Frist bis</span><input type=\"date\" id=\"mahn-frist\" value=\"{}\"></label><label class=\"field\"><span>Mahngebühr</span><div class=\"euro\"><input type=\"text\" inputmode=\"decimal\" id=\"mahn-gebuehr\" value=\"{}\"><i>€</i></div></label><label class=\"switch wide\"><input type=\"checkbox\" id=\"mahn-zinsen\"{}><span>Verzugszinsen: {} ({} % p. a., {} Tage)</span></label></div><div class=\"modal-actions\">{}{}<button class=\"btn primary\" data-act=\"mahn-ok\" data-id=\"{id}\" data-v=\"send\" data-enter>{}<span>Erstellen &amp; senden</span></button></div>",
+            esc(&x.nummer),
+            german(&x.faellig),
+            fmt_eur(x.rest()),
+            date::add_days(&heute, tage as i64),
+            fmt_num(gebuehr),
+            if f.verzugszinsen { " checked" } else { "" },
+            fmt_eur(zinsen),
+            format!("{satz:.2}").replace('.', ","),
+            ztage,
+            btn("modal-close", "", "Abbrechen", "ghost", None, ""),
+            btn("mahn-ok", "eye", "Erstellen & ansehen", "ghost", Some(id), "open"),
+            ic("send")
+        );
+        self.modal(&html);
+    }
+
     pub fn paid_modal(&mut self, id: Id) {
         let Some(x) = self.data.dokument(Some(id)) else { return };
         let mut za = String::new();
@@ -1358,14 +1473,26 @@ impl App {
             let _ = write!(za, "<option>{z}</option>");
         }
         let html = format!(
-            "<h3>Zahlung erfassen</h3><p class=\"muted\">Rechnung {} über <b>{}</b>. Die Einnahme wird automatisch in den Finanzen gebucht.</p><div class=\"form\"><label class=\"field\"><span>Zahlungseingang am</span><input type=\"date\" id=\"pay-date\" value=\"{}\"></label><label class=\"field\"><span>Zahlart</span><select id=\"pay-art\">{za}</select></label></div><div class=\"modal-actions\">{}<button class=\"btn success\" data-act=\"dok-paid-ok\" data-id=\"{id}\" data-enter>{}<span>Als bezahlt buchen</span></button></div>",
+            "<h3>Zahlung erfassen</h3><p class=\"muted\">Rechnung {} · offen <b>{}</b>. Die Einnahme wird automatisch in den Finanzen gebucht; bei einem kleineren Betrag bleibt der Rest offen (Teilzahlung).</p><div class=\"form\"><label class=\"field\"><span>Betrag</span><div class=\"euro\"><input type=\"text\" inputmode=\"decimal\" id=\"pay-betrag\" value=\"{}\"><i>€</i></div></label><label class=\"field\"><span>Zahlungseingang am</span><input type=\"date\" id=\"pay-date\" value=\"{}\"></label><label class=\"field\"><span>Zahlart</span><select id=\"pay-art\">{za}</select></label></div><div class=\"modal-actions\">{}<button class=\"btn success\" data-act=\"dok-paid-ok\" data-id=\"{id}\" data-enter>{}<span>Zahlung buchen</span></button></div>",
             esc(&x.nummer),
-            fmt_eur(x.summen().brutto),
+            fmt_eur(x.rest()),
+            fmt_num(x.rest()),
             today(),
             btn("modal-close", "", "Abbrechen", "ghost", None, ""),
             ic("check")
         );
         self.modal(&html);
+    }
+}
+
+/// Hinweis unter dem IBAN-Feld.
+pub fn iban_hint(iban: &str) -> String {
+    if iban.trim().is_empty() {
+        "Ohne IBAN erscheint kein GiroCode auf den Rechnungen.".into()
+    } else if crate::engine::girocode::iban_valid(iban) {
+        "✓ IBAN gültig – GiroCode wird erzeugt.".into()
+    } else {
+        "⚠ IBAN ungültig (Prüfziffer) – bitte prüfen.".into()
     }
 }
 

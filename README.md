@@ -30,7 +30,14 @@ Kunden, Aufträge, Angebote, Rechnungen und Finanzen an einem Ort – **komplett
 - **Per E-Mail senden**: PDF wird angehängt, Empfänger, Betreff und Text sind vorausgefüllt (Gmail, Outlook,
   Samsung E-Mail …) – oder an WhatsApp/Drive teilen; PDF ansehen oder in *Download/WWP* speichern
 - Fortlaufende Nummern je Jahr (AN-2026-0001, RE-2026-0001), Präfixe einstellbar
-- Angebot → Rechnung mit einem Tipp, Duplizieren, **Zahlungserinnerung** für überfällige Rechnungen
+- Angebot → Rechnung mit einem Tipp, Duplizieren
+- **GiroCode** (EPC-QR-Code) auf Rechnungen und Mahnungen: Banking-App scannen, Empfänger, IBAN, Betrag und
+  Verwendungszweck sind ausgefüllt; IBAN-Prüfung in den Einstellungen
+- **Mahnwesen**: Zahlungserinnerung → 1. Mahnung → 2. Mahnung mit eigenen Fristen, Gebühren und Texten,
+  optional Verzugszinsen (Basiszinssatz + 5/9 Prozentpunkte); Mahnschreiben als PDF mit Rechnungskopie,
+  per E-Mail senden, Mahnhistorie an der Rechnung, Filter „Zu mahnen“ und Hinweis auf der Startseite
+- **Teilzahlungen**: Zahlungseingänge mit beliebigem Betrag erfassen, Restbetrag wird weitergeführt; Zahlungen
+  werden nach Steuersätzen aufgeteilt gebucht, Mahngebühren/Zinsen als nicht steuerbare sonstige Einnahme
 - Versendete Rechnungen werden **festgeschrieben** (GoBD); Korrektur per **Stornorechnung**
 - **Kleinunternehmer** (§ 19 UStG): keine Umsatzsteuer, Hinweis auf der Rechnung
 - Standardtexte (Einleitung, Schluss, E-Mail) mit Platzhaltern wie `{betrag}`, `{faellig}`, `{nummer}`
@@ -93,12 +100,15 @@ Jeder Push baut über `.github/workflows/build.yml` Tests, Web-App und APK und v
 
 ```
 src/engine/   Geschäftslogik (reines Rust, getestet)
-  model.rs      Firma, Kunden, Aufträge, Angebote/Rechnungen, Buchungen, Nummernkreise, Storno, Zahlungen
+  model.rs      Firma, Kunden, Aufträge, Angebote/Rechnungen, Buchungen, Nummernkreise, Storno,
+                Zahlungen/Teilzahlungen, Mahnungen und Verzugszinsen
   money.rs      Beträge in Cent, deutsche Zahlenformate, Steuerberechnung
   date.rs       Datumsrechnung (Fälligkeiten, Zeiträume)
-  pdf.rs        PDF-Erzeugung ohne Bibliothek: Briefbogen mit Logo, Tabelle, Summen, Jahresübersicht
+  pdf.rs        PDF-Erzeugung ohne Bibliothek: Briefbogen mit Logo, Tabelle, Summen, GiroCode,
+                Mahnschreiben mit Rechnungskopie, Jahresübersicht
   report.rs     Jahres-/Monats-/Quartalsauswertung, CSV-Export
   backup.rs     Komplett-Backup, Base64, Beispieldaten
+  girocode.rs   GiroCode (EPC-QR-Code) und IBAN-Prüfung
   image.rs      PNG/JPEG für das Logo
 src/web/      Oberfläche (wasm-bindgen / web-sys)
   mod.rs        App-Zustand, Navigation, Ereignisse

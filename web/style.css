@@ -198,7 +198,8 @@ a { color: var(--accent); }
 .st-versendet, .st-angebot, .st-beauftragt { background: var(--accent-soft); color: var(--accent); }
 .st-inarbeit { background: var(--warn-soft); color: var(--warn); }
 .st-bezahlt, .st-angenommen, .st-erledigt, .st-abgerechnet { background: var(--good-soft); color: var(--good); }
-.st-ueberfaellig, .st-abgelehnt, .st-storniert { background: var(--bad-soft); color: var(--bad); }
+.st-ueberfaellig, .st-abgelehnt, .st-storniert, .st-gemahnt { background: var(--bad-soft); color: var(--bad); }
+.st-teilbezahlt { background: var(--warn-soft); color: var(--warn); }
 .st-anfrage { background: color-mix(in srgb, #8a5cf6 16%, var(--surface)); color: #8a5cf6; }
 
 .tbl { width: 100%; border-collapse: collapse; }
@@ -281,9 +282,14 @@ select.compact { width: auto; min-width: 110px; min-height: 44px; background: va
 .ed-side .switch { padding: 0 16px 14px; }
 .sum { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; margin: 0; padding: 18px 20px 6px; font-variant-numeric: tabular-nums; }
 .sum dt { color: var(--muted); }
-.sum dd { margin: 0; text-align: right; }
+.sum dd { margin: 0; text-align: right; white-space: nowrap; }
 .sum .total { font-size: 22px; font-weight: 750; color: var(--text); padding-top: 8px; border-top: 1px solid var(--line); margin-top: 4px; }
 #doc-sum .small { padding: 0 20px; margin: 0; }
+.sum .rest { font-weight: 700; color: var(--bad); }
+.row.static { cursor: default; }
+.row.static:hover { background: none; }
+.sub-h { font-size: 15px; margin-top: 6px; padding-top: 10px; border-top: 1px solid var(--line); }
+.sub-h:first-child { border-top: 0; padding-top: 0; margin-top: 0; }
 .paid { display: flex; align-items: center; gap: 8px; color: var(--good); font-weight: 600; margin: 4px 0; }
 
 .positions { padding: 8px 16px; display: flex; flex-direction: column; gap: 12px; }

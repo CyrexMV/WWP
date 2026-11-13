@@ -1,7 +1,7 @@
 //! Reaktionen auf Klicks (`data-act`), Eingaben (`data-f`) und Suchfelder (`data-search`).
 
 use super::storage::{self, load_file, open_file, save_file, share_file};
-use super::{apply_theme, el, set_html, today, value_of, App, View};
+use super::{apply_theme, checked_of, el, set_html, today, value_of, App, View};
 use crate::engine::backup;
 use crate::engine::date;
 use crate::engine::model::*;
@@ -39,7 +39,7 @@ fn file_name(x: &Dokument, d: &Data) -> String {
 enum Out {
     Open,
     Save,
-    Send { reminder: bool },
+    Send,
 }
 
 impl App {
@@ -54,25 +54,14 @@ impl App {
         match out {
             Out::Open => open_file(&bytes, "application/pdf", &name),
             Out::Save => save_file(&bytes, "application/pdf", &name),
-            Out::Send { reminder } => {
+            Out::Send => {
                 let Some(x) = self.data.dokument(Some(id)).cloned() else { return };
                 let f = self.data.firma.clone();
                 let k = self.data.kunde(x.kunde_id).cloned();
                 let to = k.as_ref().map(|k| k.email.trim().to_string()).unwrap_or_default();
-                let (subject, body) = if reminder {
-                    (
-                        format!("Zahlungserinnerung: Rechnung {}", x.nummer),
-                        x.fill(
-                            "Guten Tag {ansprechpartner},\n\nsicher ist es Ihrer Aufmerksamkeit entgangen: Unsere Rechnung {nummer} vom {datum} über {betrag} war am {faellig} fällig. Wir bitten Sie, den Betrag in den nächsten Tagen zu überweisen. Die Rechnung finden Sie noch einmal im Anhang.\n\nSollte sich Ihre Zahlung mit dieser Erinnerung überschnitten haben, betrachten Sie diese bitte als gegenstandslos.\n\nMit freundlichen Grüßen\n{firma}",
-                            &f,
-                            k.as_ref(),
-                        ),
-                    )
-                } else {
-                    match x.art {
-                        DokArt::Angebot => (x.fill(&f.mail_betreff_angebot, &f, k.as_ref()), x.fill(&f.mail_text_angebot, &f, k.as_ref())),
-                        DokArt::Rechnung => (x.fill(&f.mail_betreff_rechnung, &f, k.as_ref()), x.fill(&f.mail_text_rechnung, &f, k.as_ref())),
-                    }
+                let (subject, body) = match x.art {
+                    DokArt::Angebot => (x.fill(&f.mail_betreff_angebot, &f, k.as_ref()), x.fill(&f.mail_text_angebot, &f, k.as_ref())),
+                    DokArt::Rechnung => (x.fill(&f.mail_betreff_rechnung, &f, k.as_ref()), x.fill(&f.mail_text_rechnung, &f, k.as_ref())),
                 };
                 share_file(&bytes, "application/pdf", &name, &to, &subject, &body);
                 if x.status == DokStatus::Entwurf {
@@ -80,6 +69,29 @@ impl App {
                 }
             }
         }
+    }
+
+    /// Mahnschreiben (mit Rechnungskopie) ansehen oder per E-Mail senden.
+    fn output_mahnung(&mut self, id: Id, idx: usize, send: bool) {
+        let Some(x) = self.data.dokument(Some(id)).cloned() else { return };
+        let Some(m) = x.mahnungen.get(idx).cloned() else { return };
+        let Some(bytes) = pdf::mahnung_pdf(&self.data, &x, idx, self.logo.as_deref()) else { return };
+        let name = file_name(&x, &self.data).replacen("Rechnung_", &format!("{}_", m.label().replace(". ", "").replace(' ', "")), 1);
+        if !send {
+            open_file(&bytes, "application/pdf", &name);
+            return;
+        }
+        let f = self.data.firma.clone();
+        let k = self.data.kunde(x.kunde_id).cloned();
+        let to = k.as_ref().map(|k| k.email.trim().to_string()).unwrap_or_default();
+        let subject = x.fill_mahnung(&f.mail_betreff_mahnung, &f, k.as_ref(), &m);
+        let body = x.fill_mahnung(&f.mail_text_mahnung, &f, k.as_ref(), &m);
+        share_file(&bytes, "application/pdf", &name, &to, &subject, &body);
+        if let Some(mm) = self.data.dokument_mut(id).and_then(|x| x.mahnungen.get_mut(idx)) {
+            mm.versendet = true;
+        }
+        self.changed();
+        self.render();
     }
 
     fn mark_sent(&mut self, id: Id) {
@@ -155,6 +167,11 @@ impl App {
             "nav-fin" => self.go_root(View::Finanzen),
             "kpi-offen" => {
                 self.ui.dok_filter = "offen".into();
+                self.ui.dok_q.clear();
+                self.go_root(View::Dokumente(DokArt::Rechnung));
+            }
+            "kpi-mahnen" => {
+                self.ui.dok_filter = "zumahnen".into();
                 self.ui.dok_q.clear();
                 self.go_root(View::Dokumente(DokArt::Rechnung));
             }
@@ -328,12 +345,52 @@ impl App {
                         return;
                     }
                 }
-                self.output_doc(id, Out::Send { reminder: false });
+                self.output_doc(id, Out::Send);
             }
-            "dok-remind" => {
-                if let Some(id) = id {
-                    self.output_doc(id, Out::Send { reminder: true });
-                }
+            "mahn-new" => {
+                let Some(id) = id else { return };
+                let stufe = self.data.dokument(Some(id)).map(|x| x.naechste_stufe()).unwrap_or(0);
+                self.mahn_modal(id, stufe);
+            }
+            "mahn-ok" => {
+                let Some(id) = id else { return };
+                let stufe: u8 = value_of("mahn-stufe").parse().unwrap_or(0);
+                let datum = value_of("mahn-datum");
+                let datum = if date::parse(&datum).is_some() { datum } else { heute.clone() };
+                let frist = value_of("mahn-frist");
+                let frist = if date::parse(&frist).is_some() {
+                    frist
+                } else {
+                    date::add_days(&datum, self.data.firma.mahnstufe(stufe).0 as i64)
+                };
+                let gebuehr = parse_amount(&value_of("mahn-gebuehr")).unwrap_or(0);
+                let zinsen = checked_of("mahn-zinsen");
+                let Some(idx) = self.data.mahnung_erstellen(id, stufe, &datum, &frist, gebuehr, zinsen) else { return };
+                self.close_modal();
+                self.changed();
+                self.render();
+                self.output_mahnung(id, idx, v == "send");
+            }
+            "mahn-pdf" | "mahn-send" => {
+                let (Some(id), Some(i)) = (id, idx) else { return };
+                self.output_mahnung(id, i, act == "mahn-send");
+            }
+            "mahn-del" => {
+                let (Some(id), Some(i)) = (id, idx) else { return };
+                self.ask("Mahnung löschen?", "Die Mahnung und ihre Gebühren werden aus der Rechnung entfernt.", "Löschen", true, move |a| {
+                    a.data.mahnung_loeschen(id, i);
+                    a.changed();
+                    a.render();
+                });
+            }
+            "zahlung-del" => {
+                let Some(id) = id else { return };
+                let Ok(zid) = v.parse::<Id>() else { return };
+                self.ask("Zahlung löschen?", "Die Zahlung und die zugehörige Einnahme werden gelöscht; der Betrag gilt wieder als offen.", "Löschen", true, move |a| {
+                    a.data.zahlung_loeschen(id, zid);
+                    a.changed();
+                    a.render();
+                });
             }
             "dok-mark-sent" => {
                 if let Some(id) = id {
@@ -372,15 +429,26 @@ impl App {
                 let datum = value_of("pay-date");
                 let datum = if date::parse(&datum).is_some() { datum } else { heute };
                 let za = value_of("pay-art");
-                self.data.als_bezahlt(id, &datum, &za);
+                let rest = self.data.dokument(Some(id)).map(|x| x.rest()).unwrap_or(0);
+                let betrag = parse_amount(&value_of("pay-betrag")).unwrap_or(rest);
+                if betrag <= 0 {
+                    self.toast("Bitte einen Betrag eingeben");
+                    return;
+                }
+                self.data.zahlung_erfassen(id, &datum, betrag, &za);
                 self.close_modal();
                 self.changed();
                 self.render();
-                self.toast("Bezahlt – Einnahme wurde gebucht");
+                let rest = self.data.dokument(Some(id)).map(|x| x.rest()).unwrap_or(0);
+                if rest > 0 {
+                    self.toast(&format!("Teilzahlung gebucht – noch offen: {}", crate::engine::money::fmt_eur(rest)));
+                } else {
+                    self.toast("Bezahlt – Einnahme wurde gebucht");
+                }
             }
             "dok-unpaid" => {
                 let Some(id) = id else { return };
-                self.ask("Zahlung zurücknehmen?", "Die zugehörige Einnahme wird aus den Finanzen gelöscht und die Rechnung wieder als offen geführt.", "Zurücknehmen", true, move |a| {
+                self.ask("Zahlungen zurücknehmen?", "Alle Zahlungen dieser Rechnung und die zugehörigen Einnahmen werden gelöscht; die Rechnung gilt wieder als offen.", "Zurücknehmen", true, move |a| {
                     a.data.zahlung_zuruecknehmen(id);
                     a.changed();
                     a.render();
@@ -676,6 +744,11 @@ impl App {
                 self.ui.buch_monat = v.parse().unwrap_or(0);
                 set_html("list", &self.buch_list_html());
             }
+            "mahn-stufe" => {
+                if let View::Dokument(id) = self.view() {
+                    self.mahn_modal(id, v.parse().unwrap_or(0));
+                }
+            }
             "pick-kunde" => {
                 let art = super::query("#pick-q").and_then(|e| e.get_attribute("data-v")).unwrap_or_default();
                 set_html("pick-list", &self.kunden_pick_list(v, &art));
@@ -808,7 +881,10 @@ impl App {
                     "email" => f.email = s,
                     "web" => f.web = s,
                     "bank" => f.bank = s,
-                    "iban" => f.iban = s.to_uppercase(),
+                    "iban" => {
+                        f.iban = s.to_uppercase();
+                        set_html("iban-hint", &super::views::iban_hint(&f.iban));
+                    }
                     "bic" => f.bic = s.to_uppercase(),
                     "steuernummer" => f.steuernummer = s,
                     "ust_id" => f.ust_id = s,
@@ -831,6 +907,39 @@ impl App {
                     "mail_text_rechnung" => f.mail_text_rechnung = s,
                     "farbe" => f.farbe = s,
                     "logo_breite_mm" => f.logo_breite_mm = v.parse().unwrap_or(45.0),
+                    "girocode" => f.girocode = checked,
+                    "verzugszinsen" => f.verzugszinsen = checked,
+                    "basiszins" => f.basiszins = parse_decimal(v).unwrap_or(f.basiszins),
+                    "mail_betreff_mahnung" => f.mail_betreff_mahnung = s,
+                    "mail_text_mahnung" => f.mail_text_mahnung = s,
+                    k if k.starts_with("mahn_") => {
+                        // mahn_tage.N / mahn_gebuehr.N / mahn_text.N
+                        let Some((feld, i)) = k.split_once('.') else { return };
+                        let Ok(i) = i.parse::<usize>() else { return };
+                        if i > 2 {
+                            return;
+                        }
+                        let (t, _, x) = f.mahnstufe(i as u8);
+                        // Listen auf drei Stufen auffüllen
+                        while f.mahn_tage.len() < 3 {
+                            let n = f.mahn_tage.len() as u8;
+                            f.mahn_tage.push(f.mahnstufe(n).0);
+                        }
+                        while f.mahn_gebuehr.len() < 3 {
+                            let n = f.mahn_gebuehr.len() as u8;
+                            f.mahn_gebuehr.push(f.mahnstufe(n).1);
+                        }
+                        while f.mahn_text.len() < 3 {
+                            let n = f.mahn_text.len() as u8;
+                            f.mahn_text.push(f.mahnstufe(n).2);
+                        }
+                        match feld {
+                            "mahn_tage" => f.mahn_tage[i] = v.trim().parse().unwrap_or(t),
+                            "mahn_gebuehr" => f.mahn_gebuehr[i] = parse_amount(v).unwrap_or(0).max(0),
+                            "mahn_text" => f.mahn_text[i] = if v.trim().is_empty() { x } else { s },
+                            _ => return,
+                        }
+                    }
                     _ => return,
                 }
                 if rerender {

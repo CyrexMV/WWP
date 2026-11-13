@@ -50,7 +50,29 @@ pub struct Firma {
     /// Logo (Datei-ID im Dateispeicher).
     pub logo: Option<Id>,
     pub logo_breite_mm: f32,
+    /// GiroCode (QR-Code zum Bezahlen) auf Rechnungen und Mahnungen
+    pub girocode: bool,
+    /// Mahnwesen je Stufe (0 = Zahlungserinnerung, 1 = 1. Mahnung, 2 = 2. Mahnung)
+    pub mahn_tage: Vec<u32>,
+    pub mahn_gebuehr: Vec<Cents>,
+    pub mahn_text: Vec<String>,
+    pub mail_betreff_mahnung: String,
+    pub mail_text_mahnung: String,
+    /// Verzugszinsen berechnen (Basiszinssatz + 5 bzw. 9 Prozentpunkte, § 288 BGB)
+    pub verzugszinsen: bool,
+    pub basiszins: f64,
 }
+
+/// Bezeichnungen der Mahnstufen.
+pub const MAHNSTUFEN: [&str; 3] = ["Zahlungserinnerung", "1. Mahnung", "2. Mahnung"];
+
+const MAHN_TAGE: [u32; 3] = [7, 10, 7];
+const MAHN_GEBUEHR: [Cents; 3] = [0, 500, 1000];
+const MAHN_TEXT: [&str; 3] = [
+    "sicher ist es Ihrer Aufmerksamkeit entgangen: Unsere Rechnung {nummer} vom {datum} über {betrag} war am {faellig} fällig. Bis heute konnten wir keinen Zahlungseingang feststellen.\n\nBitte überweisen Sie den offenen Betrag von {gesamt} bis zum {frist}. Sollten Sie die Zahlung bereits veranlasst haben, betrachten Sie dieses Schreiben bitte als gegenstandslos.",
+    "leider konnten wir zu unserer Rechnung {nummer} vom {datum} trotz Zahlungserinnerung noch keinen vollständigen Zahlungseingang feststellen.\n\nWir bitten Sie, den offenen Betrag von {gesamt} bis spätestens {frist} zu überweisen.",
+    "trotz unserer bisherigen Erinnerungen ist die Rechnung {nummer} vom {datum} noch immer nicht beglichen. Wir fordern Sie hiermit letztmalig auf, den offenen Betrag von {gesamt} bis zum {frist} zu überweisen.\n\nNach Ablauf dieser Frist werden wir ohne weitere Ankündigung gerichtliche Schritte (Mahnverfahren) einleiten.",
+];
 
 impl Default for Firma {
     fn default() -> Self {
@@ -84,6 +106,14 @@ impl Default for Firma {
             farbe: "#2f5bd3".into(),
             logo: None,
             logo_breite_mm: 45.0,
+            girocode: true,
+            mahn_tage: MAHN_TAGE.to_vec(),
+            mahn_gebuehr: MAHN_GEBUEHR.to_vec(),
+            mahn_text: MAHN_TEXT.iter().map(|s| s.to_string()).collect(),
+            mail_betreff_mahnung: "{stufe} zu Rechnung {nummer} – {firma}".into(),
+            mail_text_mahnung: "Guten Tag {ansprechpartner},\n\nanbei erhalten Sie unsere {stufe} zur Rechnung {nummer} vom {datum}. Offen sind {gesamt}, bitte überweisen Sie den Betrag bis zum {frist}. Die Rechnung liegt als Kopie bei.\n\nSollte sich Ihre Zahlung mit diesem Schreiben überschnitten haben, betrachten Sie es bitte als gegenstandslos.\n\nMit freundlichen Grüßen\n{firma}".into(),
+            verzugszinsen: false,
+            basiszins: 1.27,
         }
     }
 }
@@ -97,6 +127,16 @@ impl Firma {
             .cloned()
             .collect::<Vec<_>>()
             .join(" · ")
+    }
+
+    /// Frist (Tage), Gebühr und Text einer Mahnstufe (mit Standardwerten als Rückfall).
+    pub fn mahnstufe(&self, stufe: u8) -> (u32, Cents, String) {
+        let i = (stufe as usize).min(2);
+        (
+            self.mahn_tage.get(i).copied().unwrap_or(MAHN_TAGE[i]),
+            self.mahn_gebuehr.get(i).copied().unwrap_or(MAHN_GEBUEHR[i]),
+            self.mahn_text.get(i).cloned().unwrap_or_else(|| MAHN_TEXT[i].to_string()),
+        )
     }
 
     pub fn ust_satz(&self) -> u8 {
@@ -407,6 +447,46 @@ pub struct Summen {
     pub brutto: Cents,
 }
 
+/// Zahlungserinnerung bzw. Mahnung zu einer Rechnung (Stand zum Zeitpunkt der Erstellung).
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(default)]
+pub struct Mahnung {
+    /// 0 = Zahlungserinnerung, 1 = 1. Mahnung, 2 = 2. Mahnung
+    pub stufe: u8,
+    pub datum: String,
+    /// neue Zahlungsfrist
+    pub frist: String,
+    /// offene Forderung vor dieser Mahnung (inkl. früherer Gebühren, abzüglich Zahlungen)
+    pub offen_vorher: Cents,
+    pub gebuehr: Cents,
+    pub zinsen: Cents,
+    pub zins_satz: f64,
+    pub zins_tage: i64,
+    pub versendet: bool,
+}
+
+impl Mahnung {
+    pub fn label(&self) -> &'static str {
+        MAHNSTUFEN[(self.stufe as usize).min(2)]
+    }
+    /// Zu zahlender Gesamtbetrag laut dieser Mahnung.
+    pub fn gesamt(&self) -> Cents {
+        self.offen_vorher + self.gebuehr + self.zinsen
+    }
+}
+
+/// Zahlungseingang zu einer Rechnung (auch Teilzahlung).
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(default)]
+pub struct Zahlung {
+    pub id: Id,
+    pub datum: String,
+    pub betrag: Cents,
+    pub zahlart: String,
+    /// dazu angelegte Einnahmen
+    pub buchungen: Vec<Id>,
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
 #[serde(default)]
 pub struct Dokument {
@@ -436,6 +516,8 @@ pub struct Dokument {
     /// Kleinunternehmer-Hinweis statt Umsatzsteuer
     pub kleinunternehmer: bool,
     pub versendet_am: String,
+    pub mahnungen: Vec<Mahnung>,
+    pub zahlungen: Vec<Zahlung>,
 }
 
 impl Dokument {
@@ -469,6 +551,56 @@ impl Dokument {
         self.art == DokArt::Rechnung && self.status == DokStatus::Versendet
     }
 
+    /// Bruttobetrag je Steuersatz (inkl. 0 %), für die Aufteilung von Zahlungen.
+    pub fn brutto_je_satz(&self) -> Vec<(u8, Cents)> {
+        let s = self.summen();
+        let mut v: Vec<(u8, Cents)> = s.steuern.iter().map(|(r, b, t)| (*r, b + t)).collect();
+        let null = s.netto - s.steuern.iter().map(|t| t.1).sum::<Cents>();
+        if null != 0 || v.is_empty() {
+            v.insert(0, (0, null));
+        }
+        v
+    }
+
+    /// Mahngebühren und Verzugszinsen aller Mahnungen.
+    pub fn mahnkosten(&self) -> Cents {
+        self.mahnungen.iter().map(|m| m.gebuehr + m.zinsen).sum()
+    }
+
+    /// Gesamtforderung: Rechnungsbetrag + Mahnkosten.
+    pub fn forderung(&self) -> Cents {
+        self.summen().brutto + self.mahnkosten()
+    }
+
+    /// Summe aller Zahlungseingänge.
+    pub fn gezahlt(&self) -> Cents {
+        self.zahlungen.iter().map(|z| z.betrag).sum()
+    }
+
+    /// Noch offener Betrag (inkl. Mahnkosten).
+    pub fn rest(&self) -> Cents {
+        (self.forderung() - self.gezahlt()).max(0)
+    }
+
+    pub fn teilbezahlt(&self) -> bool {
+        self.offen() && self.gezahlt() > 0
+    }
+
+    /// Letzte Mahnung.
+    pub fn letzte_mahnung(&self) -> Option<&Mahnung> {
+        self.mahnungen.last()
+    }
+
+    /// Nächste sinnvolle Mahnstufe (0–2).
+    pub fn naechste_stufe(&self) -> u8 {
+        self.letzte_mahnung().map(|m| (m.stufe + 1).min(2)).unwrap_or(0)
+    }
+
+    /// Überfällig und (noch nicht gemahnt oder Frist der letzten Mahnung verstrichen)?
+    pub fn zu_mahnen(&self, heute: &str) -> bool {
+        self.ueberfaellig(heute) && self.storno_von.is_none() && self.letzte_mahnung().map(|m| m.frist.as_str() < heute).unwrap_or(true)
+    }
+
     /// Versendete Dokumente sollen nicht mehr still verändert werden (GoBD).
     pub fn festgeschrieben(&self) -> bool {
         self.status != DokStatus::Entwurf
@@ -482,18 +614,29 @@ impl Dokument {
         }
     }
 
-    /// Anzeigestatus inkl. „Überfällig“.
+    /// Anzeigestatus inkl. „Überfällig“, Mahnstufe und Teilzahlung.
     pub fn status_text(&self, heute: &str) -> &'static str {
+        if self.offen() {
+            if let Some(m) = self.letzte_mahnung() {
+                return m.label();
+            }
+        }
         if self.ueberfaellig(heute) {
             "Überfällig"
+        } else if self.teilbezahlt() {
+            "Teilbezahlt"
         } else {
             self.status.label()
         }
     }
 
     pub fn status_key(&self, heute: &str) -> &'static str {
-        if self.ueberfaellig(heute) {
+        if self.offen() && !self.mahnungen.is_empty() {
+            "gemahnt"
+        } else if self.ueberfaellig(heute) {
             "ueberfaellig"
+        } else if self.teilbezahlt() {
+            "teilbezahlt"
         } else {
             self.status.key()
         }
@@ -517,7 +660,18 @@ impl Dokument {
             .replace("{kunde}", &kunde.map(|k| k.name()).unwrap_or_default())
             .replace("{ansprechpartner}", &ap)
             .replace("{zahlungsziel}", &ziel.to_string())
+            .replace("{offen}", &money::fmt_eur(self.rest()))
             .replace("Guten Tag ,", "Guten Tag,")
+    }
+
+    /// Platzhalter einer Mahnung: zusätzlich {stufe}, {frist}, {gesamt}, {gebuehr}.
+    pub fn fill_mahnung(&self, text: &str, firma: &Firma, kunde: Option<&Kunde>, m: &Mahnung) -> String {
+        let t = text
+            .replace("{stufe}", m.label())
+            .replace("{frist}", &date::german(&m.frist))
+            .replace("{gesamt}", &money::fmt_eur(m.gesamt()))
+            .replace("{gebuehr}", &money::fmt_eur(m.gebuehr));
+        self.fill(&t, firma, kunde)
     }
 }
 
@@ -686,7 +840,7 @@ pub const EINHEITEN: &[&str] = &["Stk.", "Std.", "Pausch.", "m", "m²", "m³", "
 
 impl Data {
     pub fn new() -> Data {
-        Data { version: 1, next_id: 1, ..Default::default() }
+        Data { version: 2, next_id: 1, ..Default::default() }
     }
 
     pub fn from_json(s: &str) -> Result<Data, String> {
@@ -706,6 +860,28 @@ impl Data {
         d.next_id = d.next_id.max(max + 1);
         if d.version == 0 {
             d.version = 1;
+        }
+        // Version 2: Zahlungen werden je Rechnung geführt (Teilzahlungen, Mahnwesen)
+        if d.version < 2 {
+            let ids: Vec<Id> = d
+                .dokumente
+                .iter()
+                .filter(|x| x.art == DokArt::Rechnung && x.status == DokStatus::Bezahlt && x.zahlungen.is_empty())
+                .map(|x| x.id)
+                .collect();
+            for id in ids {
+                let buchungen: Vec<&Buchung> = d.buchungen.iter().filter(|b| b.dokument_id == Some(id)).collect();
+                let betrag: Cents = buchungen.iter().map(|b| b.brutto).sum();
+                let bids: Vec<Id> = buchungen.iter().map(|b| b.id).collect();
+                let zahlart = buchungen.first().map(|b| b.zahlart.clone()).unwrap_or_default();
+                let zid = d.new_id();
+                if let Some(x) = d.dokument_mut(id) {
+                    let betrag = if betrag > 0 { betrag } else { x.summen().brutto };
+                    let datum = x.bezahlt_am.clone();
+                    x.zahlungen.push(Zahlung { id: zid, datum, betrag, zahlart, buchungen: bids });
+                }
+            }
+            d.version = 2;
         }
         Ok(d)
     }
@@ -897,68 +1073,168 @@ impl Data {
         Some(id)
     }
 
-    /// Rechnung als bezahlt markieren und die Einnahme buchen.
+    /// Rechnung vollständig als bezahlt markieren (Restbetrag) und die Einnahme buchen.
     pub fn als_bezahlt(&mut self, dok: Id, datum: &str, zahlart: &str) -> Option<Id> {
+        let rest = self.dokument(Some(dok))?.rest();
+        self.zahlung_erfassen(dok, datum, rest, zahlart)
+    }
+
+    /// Zahlungseingang (auch Teilzahlung) erfassen und als Einnahme buchen.
+    ///
+    /// Die Zahlung deckt zuerst den Rechnungsbetrag – aufgeteilt nach Steuersätzen –, ein Rest
+    /// gilt für Mahngebühren/Verzugszinsen (nicht umsatzsteuerbar, „Sonstige Einnahmen“).
+    /// Liefert die ID der ersten Buchung.
+    pub fn zahlung_erfassen(&mut self, dok: Id, datum: &str, betrag: Cents, zahlart: &str) -> Option<Id> {
         let d = self.dokument(Some(dok))?.clone();
-        let s = d.summen();
-        // gemischte Steuersätze: Einnahme nach dem überwiegenden Satz, sonst getrennt buchen
-        let rate = s.steuern.iter().max_by_key(|t| t.1).map(|t| t.0).unwrap_or(0);
+        if betrag <= 0 {
+            return None;
+        }
+        let brutto = d.summen().brutto;
+        let vorher_auf_rechnung = d.gezahlt().clamp(0, brutto.max(0));
+        let rechnungsteil = betrag.min((brutto - vorher_auf_rechnung).max(0));
+        let kostenteil = betrag - rechnungsteil;
         let partner = self.kunden_name(d.kunde_id);
         let mut ids = Vec::new();
-        if s.steuern.len() > 1 {
-            for (r, basis, steuer) in &s.steuern {
+        let saetze = d.brutto_je_satz();
+        if rechnungsteil > 0 {
+            let mut verteilt = 0;
+            let n = saetze.len();
+            for (i, (rate, anteil)) in saetze.iter().enumerate() {
+                let teil = if i + 1 == n {
+                    rechnungsteil - verteilt
+                } else {
+                    (rechnungsteil as f64 * *anteil as f64 / brutto.max(1) as f64).round() as Cents
+                };
+                verteilt += teil;
+                if teil == 0 {
+                    continue;
+                }
+                let mut text = format!("Rechnung {}", d.nummer);
+                if n > 1 {
+                    text += &format!(" ({} %)", rate);
+                }
+                if rechnungsteil < brutto - vorher_auf_rechnung || vorher_auf_rechnung > 0 {
+                    text += " – Teilzahlung";
+                }
                 let bid = self.new_id();
                 ids.push(bid);
                 self.buchungen.push(Buchung {
                     id: bid,
                     art: BuchArt::Einnahme,
                     datum: datum.into(),
-                    brutto: basis + steuer,
-                    ust: *r,
+                    brutto: teil,
+                    ust: *rate,
                     kategorie: "Umsatzerlöse".into(),
-                    text: format!("Rechnung {} ({} %)", d.nummer, r),
+                    text,
                     partner: partner.clone(),
                     zahlart: zahlart.into(),
                     beleg: None,
                     dokument_id: Some(dok),
                 });
             }
-        } else {
+        }
+        if kostenteil > 0 {
             let bid = self.new_id();
             ids.push(bid);
             self.buchungen.push(Buchung {
                 id: bid,
                 art: BuchArt::Einnahme,
                 datum: datum.into(),
-                brutto: s.brutto,
-                ust: rate,
-                kategorie: "Umsatzerlöse".into(),
-                text: format!("Rechnung {}", d.nummer),
+                brutto: kostenteil,
+                ust: 0,
+                kategorie: "Sonstige Einnahmen".into(),
+                text: format!("Mahngebühren/Zinsen Rechnung {}", d.nummer),
                 partner,
                 zahlart: zahlart.into(),
                 beleg: None,
                 dokument_id: Some(dok),
             });
         }
+        let zid = self.new_id();
         let first = ids.first().copied();
+        let mut fertig = false;
         if let Some(x) = self.dokument_mut(dok) {
-            x.status = DokStatus::Bezahlt;
-            x.bezahlt_am = datum.into();
-            x.buchung_id = first;
+            x.zahlungen.push(Zahlung { id: zid, datum: datum.into(), betrag, zahlart: zahlart.into(), buchungen: ids });
+            if x.rest() == 0 {
+                x.status = DokStatus::Bezahlt;
+                x.bezahlt_am = datum.into();
+                x.buchung_id = first;
+                fertig = true;
+            }
         }
-        if let Some(aid) = d.auftrag_id {
-            self.auftrag_status(aid, AuftragStatus::Abgerechnet, datum);
+        if fertig {
+            if let Some(aid) = d.auftrag_id {
+                self.auftrag_status(aid, AuftragStatus::Abgerechnet, datum);
+            }
         }
         first
     }
 
-    /// Zahlung zurücknehmen: zugehörige Buchungen löschen, Status wieder „Versendet“.
+    /// Einzelne Zahlung löschen (samt Buchungen); eine bezahlte Rechnung wird wieder offen.
+    pub fn zahlung_loeschen(&mut self, dok: Id, zahlung: Id) {
+        let Some(x) = self.dokument_mut(dok) else { return };
+        let Some(pos) = x.zahlungen.iter().position(|z| z.id == zahlung) else { return };
+        let z = x.zahlungen.remove(pos);
+        if x.status == DokStatus::Bezahlt && x.rest() > 0 {
+            x.status = DokStatus::Versendet;
+            x.bezahlt_am.clear();
+            x.buchung_id = None;
+        }
+        self.buchungen.retain(|b| !z.buchungen.contains(&b.id));
+    }
+
+    /// Alle Zahlungen zurücknehmen: zugehörige Buchungen löschen, Status wieder „Versendet“.
     pub fn zahlung_zuruecknehmen(&mut self, dok: Id) {
         self.buchungen.retain(|b| b.dokument_id != Some(dok));
         if let Some(x) = self.dokument_mut(dok) {
             x.status = DokStatus::Versendet;
             x.bezahlt_am.clear();
             x.buchung_id = None;
+            x.zahlungen.clear();
+        }
+    }
+
+    /// Verzugszinsen: Satz (% p. a.) und Betrag für den offenen Rechnungsbetrag
+    /// vom Beginn (Fälligkeit bzw. letzte Mahnung) bis `datum`.
+    pub fn verzugszinsen(&self, dok: Id, datum: &str) -> (f64, i64, Cents) {
+        let Some(d) = self.dokument(Some(dok)) else { return (0.0, 0, 0) };
+        let geschaeftskunde = self.kunde(d.kunde_id).map(|k| !k.firma.trim().is_empty()).unwrap_or(false);
+        let satz = (self.firma.basiszins + if geschaeftskunde { 9.0 } else { 5.0 }).max(0.0);
+        let beginn = d.letzte_mahnung().map(|m| m.datum.clone()).unwrap_or_else(|| d.faellig.clone());
+        let tage = date::diff_days(&beginn, datum).unwrap_or(0).max(0);
+        let brutto = d.summen().brutto;
+        let offen = (brutto - d.gezahlt().clamp(0, brutto.max(0))).max(0);
+        let zinsen = (offen as f64 * satz / 100.0 * tage as f64 / 365.0).round() as Cents;
+        (satz, tage, zinsen)
+    }
+
+    /// Mahnung anlegen; liefert ihren Index in der Rechnung.
+    pub fn mahnung_erstellen(&mut self, dok: Id, stufe: u8, datum: &str, frist: &str, gebuehr: Cents, mit_zinsen: bool) -> Option<usize> {
+        let (satz, tage, zinsen) = if mit_zinsen { self.verzugszinsen(dok, datum) } else { (0.0, 0, 0) };
+        let x = self.dokument_mut(dok)?;
+        if x.art != DokArt::Rechnung {
+            return None;
+        }
+        let m = Mahnung {
+            stufe: stufe.min(2),
+            datum: datum.into(),
+            frist: frist.into(),
+            offen_vorher: x.rest(),
+            gebuehr: gebuehr.max(0),
+            zinsen,
+            zins_satz: if mit_zinsen { satz } else { 0.0 },
+            zins_tage: if mit_zinsen { tage } else { 0 },
+            versendet: false,
+        };
+        x.mahnungen.push(m);
+        Some(x.mahnungen.len() - 1)
+    }
+
+    pub fn mahnung_loeschen(&mut self, dok: Id, idx: usize) {
+        if let Some(x) = self.dokument_mut(dok) {
+            if idx < x.mahnungen.len() {
+                x.mahnungen.remove(idx);
+            }
         }
     }
 
@@ -1167,6 +1443,92 @@ mod tests {
         let f = Data::from_json(r#"{"kunden":[{"id":7,"firma":"X"}]}"#).unwrap();
         assert_eq!(f.next_id, 8);
         assert_eq!(f.firma.zahlungsziel, 14);
+    }
+
+    #[test]
+    fn partial_payments_and_fees() {
+        let (mut d, k) = demo();
+        let r = d.neues_dokument(DokArt::Rechnung, Some(k), None, "2026-10-01");
+        {
+            let x = d.dokument_mut(r).unwrap();
+            x.positionen = vec![
+                Position { text: "A".into(), menge: 1.0, einheit: "Stk.".into(), preis: 10_000, ust: 19 },
+                Position { text: "B".into(), menge: 1.0, einheit: "Stk.".into(), preis: 10_000, ust: 7 },
+            ];
+            x.status = DokStatus::Versendet;
+        }
+        // brutto 119 + 107 = 226,00 €
+        assert_eq!(d.dokument(Some(r)).unwrap().rest(), 22_600);
+        // Mahnung mit 5 € Gebühr
+        let i = d.mahnung_erstellen(r, 1, "2026-11-01", "2026-11-11", 500, false).unwrap();
+        let m = d.dokument(Some(r)).unwrap().mahnungen[i].clone();
+        assert_eq!(m.offen_vorher, 22_600);
+        assert_eq!(m.gesamt(), 23_100);
+        assert_eq!(d.dokument(Some(r)).unwrap().status_text("2026-11-02"), "1. Mahnung");
+        // Teilzahlung 100 € → aufgeteilt nach Steuersätzen
+        d.zahlung_erfassen(r, "2026-11-05", 10_000, "Überweisung");
+        let x = d.dokument(Some(r)).unwrap();
+        assert_eq!(x.rest(), 13_100);
+        assert_eq!(x.status, DokStatus::Versendet);
+        assert!(x.teilbezahlt());
+        let teile: Vec<(u8, Cents)> = d.buchungen.iter().map(|b| (b.ust, b.brutto)).collect();
+        assert_eq!(teile, vec![(7, 4_735), (19, 5_265)]);
+        // Rest inkl. Mahngebühr
+        d.als_bezahlt(r, "2026-11-10", "Bar");
+        let x = d.dokument(Some(r)).unwrap();
+        assert_eq!(x.status, DokStatus::Bezahlt);
+        assert_eq!(x.rest(), 0);
+        let summe: Cents = d.buchungen.iter().map(|b| b.brutto).sum();
+        assert_eq!(summe, 23_100);
+        let gebuehr = d.buchungen.iter().find(|b| b.kategorie == "Sonstige Einnahmen").unwrap();
+        assert_eq!((gebuehr.brutto, gebuehr.ust), (500, 0));
+        // einzelne Zahlung löschen → wieder offen
+        let zid = d.dokument(Some(r)).unwrap().zahlungen[1].id;
+        d.zahlung_loeschen(r, zid);
+        let x = d.dokument(Some(r)).unwrap();
+        assert_eq!(x.status, DokStatus::Versendet);
+        assert_eq!(x.rest(), 13_100);
+        assert_eq!(d.buchungen.len(), 2);
+    }
+
+    #[test]
+    fn interest_and_dunning_levels() {
+        let (mut d, k) = demo();
+        d.firma.basiszins = 1.0;
+        let r = d.neues_dokument(DokArt::Rechnung, Some(k), None, "2026-01-01");
+        {
+            let x = d.dokument_mut(r).unwrap();
+            x.positionen[0].preis = 100_000;
+            x.status = DokStatus::Versendet;
+            x.faellig = "2026-01-15".into();
+        }
+        assert!(d.dokument(Some(r)).unwrap().zu_mahnen("2026-01-20"));
+        assert_eq!(d.dokument(Some(r)).unwrap().naechste_stufe(), 0);
+        // Geschäftskunde: 1 % + 9 % = 10 % p. a. auf 1.190 € für 73 Tage = 23,80 €
+        let (satz, tage, zinsen) = d.verzugszinsen(r, "2026-03-29");
+        assert_eq!((satz, tage, zinsen), (10.0, 73, 2_380));
+        d.mahnung_erstellen(r, 0, "2026-01-20", "2026-01-27", 0, false);
+        let x = d.dokument(Some(r)).unwrap();
+        assert!(!x.zu_mahnen("2026-01-25"));
+        assert!(x.zu_mahnen("2026-01-28"));
+        assert_eq!(x.naechste_stufe(), 1);
+        assert_eq!(x.status_key("2026-01-28"), "gemahnt");
+    }
+
+    #[test]
+    fn migrates_old_paid_invoices() {
+        let (mut d, k) = demo();
+        let r = d.neues_dokument(DokArt::Rechnung, Some(k), None, "2026-11-12");
+        d.dokument_mut(r).unwrap().positionen[0].preis = 10_000;
+        d.als_bezahlt(r, "2026-11-20", "Bar");
+        // alten Stand (ohne Zahlungsliste) nachbilden
+        d.version = 1;
+        d.dokument_mut(r).unwrap().zahlungen.clear();
+        let e = Data::from_json(&d.to_json()).unwrap();
+        let x = e.dokument(Some(r)).unwrap();
+        assert_eq!(x.zahlungen.len(), 1);
+        assert_eq!(x.rest(), 0);
+        assert_eq!(e.version, 2);
     }
 
     #[test]

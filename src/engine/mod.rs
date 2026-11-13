@@ -2,6 +2,7 @@
 
 pub mod backup;
 pub mod date;
+pub mod girocode;
 pub mod image;
 pub mod model;
 pub mod money;

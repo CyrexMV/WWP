@@ -251,6 +251,15 @@ pub fn value_of(id: &str) -> String {
     element_value(&e)
 }
 
+/// Ist die Checkbox mit dieser ID angehakt?
+pub fn checked_of(id: &str) -> bool {
+    dom()
+        .get_element_by_id(id)
+        .and_then(|e| e.dyn_into::<HtmlInputElement>().ok())
+        .map(|i| i.checked())
+        .unwrap_or(false)
+}
+
 pub fn element_value(e: &Element) -> String {
     if let Some(i) = e.dyn_ref::<HtmlInputElement>() {
         i.value()

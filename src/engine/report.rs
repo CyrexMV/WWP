@@ -166,7 +166,10 @@ pub fn csv_buchungen(d: &Data, jahr: Option<i32>) -> String {
 /// Rechnungsausgangsbuch als CSV.
 pub fn csv_rechnungen(d: &Data, jahr: Option<i32>) -> String {
     let mut out = String::from("\u{feff}");
-    out += &csv_line(&["Nummer", "Datum", "Kunde", "Betreff", "Netto", "USt", "Brutto", "Status", "Fällig", "Bezahlt am"].map(String::from));
+    out += &csv_line(
+        &["Nummer", "Datum", "Kunde", "Betreff", "Netto", "USt", "Brutto", "Status", "Fällig", "Bezahlt am", "Gezahlt", "Offen", "Mahnstufe", "Mahnkosten"]
+            .map(String::from),
+    );
     let mut list: Vec<_> = d
         .dokumente
         .iter()
@@ -187,6 +190,10 @@ pub fn csv_rechnungen(d: &Data, jahr: Option<i32>) -> String {
             r.status.label().into(),
             date::german(&r.faellig),
             date::german(&r.bezahlt_am),
+            money::fmt_num(r.gezahlt()),
+            money::fmt_num(if r.offen() { r.rest() } else { 0 }),
+            r.letzte_mahnung().map(|m| m.label().to_string()).unwrap_or_default(),
+            money::fmt_num(r.mahnkosten()),
         ]);
     }
     out

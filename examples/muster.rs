@@ -42,5 +42,16 @@ fn main() {
         let name = format!("{}/{}.pdf", dir, doc.nummer);
         std::fs::write(&name, bytes).unwrap();
         println!("{name}");
+        if art == DokArt::Rechnung {
+            // Mahnung mit Gebühr und Verzugszinsen nach einer Teilzahlung
+            d.dokument_mut(r).unwrap().status = DokStatus::Versendet;
+            d.mahnung_erstellen(r, 0, "2026-12-01", "2026-12-08", 0, false);
+            d.zahlung_erfassen(r, "2026-12-03", 10_000, "Überweisung");
+            let i = d.mahnung_erstellen(r, 1, "2026-12-20", "2026-12-30", 500, true).unwrap();
+            let doc = d.dokument(Some(r)).unwrap().clone();
+            let name = format!("{}/Mahnung-{}.pdf", dir, doc.nummer);
+            std::fs::write(&name, pdf::mahnung_pdf(&d, &doc, i, None).unwrap()).unwrap();
+            println!("{name}");
+        }
     }
 }
