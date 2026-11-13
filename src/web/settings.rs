@@ -305,16 +305,23 @@ impl App {
         }
         h += &group("Steuern", "", &steuer);
         h += &group(
-            "Bezahlen per QR-Code",
+            "Bezahlen & E-Rechnung",
             "",
             &format!(
-                "<div class=\"qr-row\"><div class=\"qr-art\">{}</div>{}</div>",
+                "<div class=\"qr-row\"><div class=\"qr-art\">{}</div>{}</div><div class=\"qr-row\"><div class=\"qr-art\">{}</div>{}</div>",
                 ic("qr"),
                 toggle(
                     "f.girocode",
                     f.girocode,
                     "GiroCode auf Rechnungen und Mahnungen",
                     "Kunden scannen den Code mit ihrer Banking-App – IBAN, Betrag und Verwendungszweck sind sofort ausgefüllt."
+                ),
+                ic("file"),
+                toggle(
+                    "f.zugferd",
+                    f.zugferd,
+                    "Rechnungen als E-Rechnung (ZUGFeRD)",
+                    "Die Rechnungsdaten werden nach EN 16931 als XML ins PDF eingebettet (PDF/A-3). Für Behörden gibt es zusätzlich die XRechnung als XML-Datei."
                 )
             ),
         );
@@ -389,9 +396,11 @@ impl App {
             "Fristen",
             "Werden bei neuen Dokumenten vorgeschlagen und lassen sich dort einzeln ändern.",
             &format!(
-                "<div class=\"form\">{}{}</div>",
+                "<div class=\"form\">{}{}{}{}</div>",
                 suffix("Zahlungsziel Rechnungen", "f.zahlungsziel", &f.zahlungsziel.to_string(), "Tage"),
-                suffix("Gültigkeit Angebote", "f.angebot_gueltig", &f.angebot_gueltig.to_string(), "Tage")
+                suffix("Gültigkeit Angebote", "f.angebot_gueltig", &f.angebot_gueltig.to_string(), "Tage"),
+                suffix("Skonto (Standard)", "f.skonto_prozent", &format!("{}", f.skonto_prozent).replace('.', ","), "%"),
+                suffix("Skontofrist", "f.skonto_tage", &f.skonto_tage.to_string(), "Tage")
             ),
         );
         h
@@ -521,13 +530,24 @@ impl App {
             }
             let _ = write!(
                 body,
-                "<div class=\"kat-row\">{}{}{}<label class=\"field\"><span>USt.</span><select data-f=\"l.{i}.ust\">{opts}</select></label><button class=\"icon-btn sm danger-text\" data-act=\"kat-del\" data-v=\"{i}\" title=\"Entfernen\">{}</button></div>",
+                "<div class=\"kat-row\">{}{}{}{}{}<label class=\"field\"><span>USt.</span><select data-f=\"l.{i}.ust\">{opts}</select></label><div class=\"marge\" id=\"marge-{i}\">{}</div><button class=\"icon-btn sm danger-text\" data-act=\"kat-del\" data-v=\"{i}\" title=\"Entfernen\">{}</button></div>",
                 text("Bezeichnung", &format!("l.{i}.text"), &l.text, "placeholder=\"z. B. Arbeitsstunde\""),
+                text("Kategorie", &format!("l.{i}.kategorie"), &l.kategorie, "list=\"kategorien\" placeholder=\"z. B. Arbeit\""),
                 text("Einheit", &format!("l.{i}.einheit"), &l.einheit, "list=\"einheiten\""),
-                money_f("Preis netto", &format!("l.{i}.preis"), l.preis, "placeholder=\"0,00\""),
+                money_f("EK netto", &format!("l.{i}.ek"), l.ek, "placeholder=\"0,00\""),
+                money_f("VK netto", &format!("l.{i}.preis"), l.preis, "placeholder=\"0,00\""),
+                marge_html(l),
                 ic("trash")
             );
         }
+        body += "<datalist id=\"kategorien\">";
+        let mut kats: Vec<&str> = self.data.katalog.iter().map(|l| l.kategorie.trim()).filter(|k| !k.is_empty()).collect();
+        kats.sort();
+        kats.dedup();
+        for k in kats {
+            let _ = write!(body, "<option value=\"{}\">", esc(k));
+        }
+        body += "</datalist>";
         body += "<datalist id=\"einheiten\">";
         for e in EINHEITEN {
             let _ = write!(body, "<option value=\"{e}\">");
@@ -591,6 +611,7 @@ impl App {
     pub fn settings_action(&mut self, act: &str, v: &str) -> bool {
         match act {
             "set-tab" => {
+                self.close_modal();
                 self.ui.settings_tab = v.to_string();
                 if self.view() != super::View::Einstellungen {
                     self.go_root(super::View::Einstellungen);
@@ -619,6 +640,18 @@ impl App {
             _ => return false,
         }
         true
+    }
+}
+
+/// Marge einer Katalogleistung als Plakette.
+pub fn marge_html(l: &crate::engine::model::Leistung) -> String {
+    match l.marge() {
+        Some(m) => format!(
+            "<span>Marge</span><b class=\"{}\">{} %</b>",
+            if m < 15.0 { "neg" } else { "plus" },
+            format!("{:.1}", m).replace('.', ",")
+        ),
+        None => "<span>Marge</span><b class=\"muted\">–</b>".into(),
     }
 }
 

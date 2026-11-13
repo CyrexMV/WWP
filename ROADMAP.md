@@ -9,6 +9,10 @@ der Stand wird im GitHub-Project-Board verfolgt.
 |---|----------|---------|
 | [#3](https://github.com/CyrexMV/WWP/issues/3) | ✅ GiroCode (QR-Code zum Bezahlen) auf Rechnungen | Rechnungen |
 | [#4](https://github.com/CyrexMV/WWP/issues/4) | ✅ Mahnwesen mit Mahnstufen und Teilzahlungen | Rechnungen |
+| [#2](https://github.com/CyrexMV/WWP/issues/2) | ✅ E-Rechnung: ZUGFeRD / XRechnung erzeugen | Rechnungen |
+| [#9](https://github.com/CyrexMV/WWP/issues/9) | ✅ Rabatt und Skonto | Rechnungen |
+| [#12](https://github.com/CyrexMV/WWP/issues/12) | ✅ Positionsgruppen, Zwischensummen und optionale Positionen | Rechnungen |
+| [#14](https://github.com/CyrexMV/WWP/issues/14) | ✅ Termine und Kalenderansicht | Aufträge |
 | [#11](https://github.com/CyrexMV/WWP/issues/11) | ✅ Unterschrift per S-Pen, Auftragsbestätigung und Lieferschein | Rechnungen, Aufträge |
 | [#28](https://github.com/CyrexMV/WWP/issues/28) | ✅ Buttons modernisieren | Design |
 | – | ✅ Einstellungen neu gestaltet (Bereiche, Live-Vorschau, Einrichtungsstand) | Design |
@@ -18,7 +22,6 @@ der Stand wird im GitHub-Project-Board verfolgt.
 | # | Funktion | Bereich |
 |---|----------|---------|
 | [#1](https://github.com/CyrexMV/WWP/issues/1) | Praxistest auf dem Galaxy Tab S12 Ultra (Android-Funktionen) | Technik |
-| [#2](https://github.com/CyrexMV/WWP/issues/2) | E-Rechnung: ZUGFeRD / XRechnung erzeugen | Rechnungen |
 | [#5](https://github.com/CyrexMV/WWP/issues/5) | Backup-Erinnerung und automatisches Backup | Technik |
 | [#6](https://github.com/CyrexMV/WWP/issues/6) | App-Sperre mit PIN und Fingerabdruck | Technik |
 | [#7](https://github.com/CyrexMV/WWP/issues/7) | Zeiterfassung pro Auftrag → direkt in die Rechnung | Aufträge |
@@ -28,11 +31,8 @@ der Stand wird im GitHub-Project-Board verfolgt.
 | # | Funktion | Bereich |
 |---|----------|---------|
 | [#8](https://github.com/CyrexMV/WWP/issues/8) | Abschlags- und Schlussrechnungen | Rechnungen |
-| [#9](https://github.com/CyrexMV/WWP/issues/9) | Rabatt und Skonto | Rechnungen |
 | [#10](https://github.com/CyrexMV/WWP/issues/10) | Wiederkehrende Rechnungen (z. B. Wartungsverträge) | Rechnungen |
-| [#12](https://github.com/CyrexMV/WWP/issues/12) | Positionsgruppen, Zwischensummen und optionale Positionen | Rechnungen |
 | [#13](https://github.com/CyrexMV/WWP/issues/13) | Fotos, Dateien und Skizzen am Auftrag | Aufträge |
-| [#14](https://github.com/CyrexMV/WWP/issues/14) | Termine und Kalenderansicht | Aufträge |
 | [#15](https://github.com/CyrexMV/WWP/issues/15) | Wiedervorlagen und Aufgaben (z. B. Angebot nachfassen) | Aufträge |
 | [#16](https://github.com/CyrexMV/WWP/issues/16) | Kunden: mehrere Ansprechpartner und Adressen, Import aus CSV/Kontakten | Kunden |
 | [#17](https://github.com/CyrexMV/WWP/issues/17) | Bankumsätze importieren und mit Rechnungen abgleichen | Finanzen |
@@ -56,7 +56,7 @@ der Stand wird im GitHub-Project-Board verfolgt.
 
 1. **Absichern:** #1 Praxistest, #5 Backup, #6 App-Sperre
 2. ~~**Schneller bezahlt werden:** #3 GiroCode, #4 Mahnwesen~~ ✅
-3. **Rechtssicher bleiben:** #2 E-Rechnung (vor der B2B-Pflicht)
-4. **Arbeit vor Ort:** #7 Zeiterfassung, ~~#11 Unterschrift~~ ✅, #13 Fotos, #14 Termine
+3. ~~**Rechtssicher bleiben:** #2 E-Rechnung (vor der B2B-Pflicht)~~ ✅
+4. **Arbeit vor Ort:** #7 Zeiterfassung, ~~#11 Unterschrift~~ ✅, #13 Fotos, ~~#14 Termine~~ ✅
 5. **Weniger Tipparbeit in den Finanzen:** #17 Bankimport, #18 wiederkehrende Ausgaben, #21 Belegerkennung
 6. Danach nach Bedarf

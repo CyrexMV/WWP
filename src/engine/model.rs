@@ -61,6 +61,11 @@ pub struct Firma {
     pub logo_breite_mm: f32,
     /// GiroCode (QR-Code zum Bezahlen) auf Rechnungen und Mahnungen
     pub girocode: bool,
+    /// Standard-Skonto für neue Rechnungen (%, 0 = kein Skonto) und Frist in Tagen
+    pub skonto_prozent: f64,
+    pub skonto_tage: u32,
+    /// Rechnungs-PDFs immer als E-Rechnung (ZUGFeRD) mit eingebetteten XML-Daten erzeugen
+    pub zugferd: bool,
     /// Mahnwesen je Stufe (0 = Zahlungserinnerung, 1 = 1. Mahnung, 2 = 2. Mahnung)
     pub mahn_tage: Vec<u32>,
     pub mahn_gebuehr: Vec<Cents>,
@@ -124,6 +129,9 @@ impl Default for Firma {
             logo: None,
             logo_breite_mm: 45.0,
             girocode: true,
+            skonto_prozent: 0.0,
+            skonto_tage: 7,
+            zugferd: true,
             mahn_tage: MAHN_TAGE.to_vec(),
             mahn_gebuehr: MAHN_GEBUEHR.to_vec(),
             mahn_text: MAHN_TEXT.iter().map(|s| s.to_string()).collect(),
@@ -186,6 +194,16 @@ pub struct Kunde {
     pub ust_id: String,
     pub notizen: String,
     pub erstellt: String,
+    /// Standardrabatt für neue Dokumente (%)
+    pub rabatt: f64,
+    /// abweichendes Zahlungsziel (Tage)
+    pub zahlungsziel: Option<u32>,
+    /// abweichendes Skonto (%)
+    pub skonto: Option<f64>,
+    /// Rechnungen als E-Rechnung (ZUGFeRD/XRechnung) senden
+    pub erechnung: bool,
+    /// Leitweg-ID (öffentliche Auftraggeber, XRechnung)
+    pub leitweg_id: String,
 }
 
 impl Kunde {
@@ -459,32 +477,144 @@ impl DokStatus {
     }
 }
 
+/// Art einer Position.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default, Hash)]
+pub enum PosArt {
+    /// normale, berechnete Position
+    #[default]
+    Normal,
+    /// Überschrift einer Gruppe (mit Zwischensumme)
+    Titel,
+    /// reiner Text ohne Preis
+    Text,
+    /// optionale/alternative Position: wird angezeigt, aber nicht summiert
+    Optional,
+}
+
+impl PosArt {
+    pub const ALLE: [PosArt; 4] = [PosArt::Normal, PosArt::Titel, PosArt::Text, PosArt::Optional];
+    pub fn label(self) -> &'static str {
+        match self {
+            PosArt::Normal => "Position",
+            PosArt::Titel => "Titel",
+            PosArt::Text => "Text",
+            PosArt::Optional => "Optional",
+        }
+    }
+    pub fn key(self) -> &'static str {
+        match self {
+            PosArt::Normal => "normal",
+            PosArt::Titel => "titel",
+            PosArt::Text => "text",
+            PosArt::Optional => "optional",
+        }
+    }
+    pub fn from_key(k: &str) -> Option<Self> {
+        Self::ALLE.into_iter().find(|a| a.key() == k)
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(default)]
 pub struct Position {
+    pub art: PosArt,
     pub text: String,
     pub menge: f64,
     pub einheit: String,
     /// Einzelpreis netto in Cent
     pub preis: Cents,
     pub ust: u8,
+    /// Positionsrabatt in Prozent
+    pub rabatt: f64,
 }
 
 impl Default for Position {
     fn default() -> Self {
-        Position { text: String::new(), menge: 1.0, einheit: "Stk.".into(), preis: 0, ust: 19 }
+        Position { art: PosArt::Normal, text: String::new(), menge: 1.0, einheit: "Stk.".into(), preis: 0, ust: 19, rabatt: 0.0 }
     }
 }
 
 impl Position {
-    pub fn netto(&self) -> Cents {
-        money::times(self.preis, self.menge)
+    /// Hat die Position Menge und Preis?
+    pub fn mit_preis(&self) -> bool {
+        matches!(self.art, PosArt::Normal | PosArt::Optional)
     }
+    /// Zählt die Position zur Summe?
+    pub fn zaehlt(&self) -> bool {
+        self.art == PosArt::Normal
+    }
+    /// Menge × Einzelpreis (vor Rabatt)
+    pub fn brutto_zeile(&self) -> Cents {
+        if self.mit_preis() {
+            money::times(self.preis, self.menge)
+        } else {
+            0
+        }
+    }
+    /// Positionsbetrag netto nach Positionsrabatt
+    pub fn netto(&self) -> Cents {
+        if !self.mit_preis() {
+            return 0;
+        }
+        let r = self.rabatt.clamp(0.0, 100.0);
+        (self.preis as f64 * self.menge * (1.0 - r / 100.0)).round() as Cents
+    }
+    /// Rabattbetrag der Position
+    pub fn rabatt_betrag(&self) -> Cents {
+        self.brutto_zeile() - self.netto()
+    }
+}
+
+/// Positionsnummern: ohne Titel „1, 2, 3“, mit Titeln „1“ (Titel) und „1.1, 1.2“ (Positionen).
+/// Texte erhalten keine Nummer.
+pub fn positionsnummern(pos: &[Position]) -> Vec<String> {
+    let mit_titeln = pos.iter().any(|p| p.art == PosArt::Titel);
+    let (mut t, mut n) = (0, 0);
+    pos.iter()
+        .map(|p| match p.art {
+            PosArt::Text => String::new(),
+            PosArt::Titel => {
+                t += 1;
+                n = 0;
+                t.to_string()
+            }
+            _ => {
+                n += 1;
+                if mit_titeln && t > 0 {
+                    format!("{t}.{n}")
+                } else {
+                    n.to_string()
+                }
+            }
+        })
+        .collect()
+}
+
+/// Zwischensummen der Titelgruppen: Index des Titels → Summe der zählenden Positionen bis zum nächsten Titel.
+pub fn zwischensummen(pos: &[Position]) -> Vec<(usize, Cents)> {
+    let mut v: Vec<(usize, Cents)> = Vec::new();
+    for (i, p) in pos.iter().enumerate() {
+        if p.art == PosArt::Titel {
+            v.push((i, 0));
+        } else if p.zaehlt() {
+            if let Some(last) = v.last_mut() {
+                last.1 += p.netto();
+            }
+        }
+    }
+    v
 }
 
 /// Summen eines Dokuments.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Summen {
+    /// Summe der Positionen (nach Positionsrabatten, vor Gesamtrabatt)
+    pub positionen: Cents,
+    /// Gesamtrabatt (netto)
+    pub rabatt: Cents,
+    /// Gesamtrabatt je Steuersatz (Satz, Betrag)
+    pub rabatt_saetze: Vec<(u8, Cents)>,
+    /// Nettobetrag nach Gesamtrabatt
     pub netto: Cents,
     /// (Steuersatz, Nettobasis, Steuer) je Satz, aufsteigend
     pub steuern: Vec<(u8, Cents, Cents)>,
@@ -553,6 +683,8 @@ pub struct Zahlung {
     pub zahlart: String,
     /// dazu angelegte Einnahmen
     pub buchungen: Vec<Id>,
+    /// gewährter Nachlass (Skonto), der die Forderung ohne Zahlung mindert
+    pub nachlass: Cents,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
@@ -588,25 +720,64 @@ pub struct Dokument {
     pub zahlungen: Vec<Zahlung>,
     /// Unterschrift des Kunden (Angebot angenommen, Auftrag bestätigt, Lieferung erhalten)
     pub unterschrift: Option<Unterschrift>,
+    /// Gesamtrabatt in Prozent (wird nur genutzt, wenn kein fester Betrag gesetzt ist)
+    pub rabatt_prozent: f64,
+    /// Gesamtrabatt als fester Betrag (netto)
+    pub rabatt_betrag: Cents,
+    pub skonto_prozent: f64,
+    pub skonto_tage: u32,
 }
 
 impl Dokument {
     pub fn summen(&self) -> Summen {
         let mut by: BTreeMap<u8, Cents> = BTreeMap::new();
-        let mut netto = 0;
-        for p in &self.positionen {
+        let mut summe = 0;
+        for p in self.positionen.iter().filter(|p| p.zaehlt()) {
             let n = p.netto();
-            netto += n;
+            summe += n;
             let rate = if self.kleinunternehmer { 0 } else { p.ust };
             *by.entry(rate).or_default() += n;
         }
+        // Gesamtrabatt (Prozent oder fester Betrag), anteilig auf die Steuersätze verteilt
+        let rabatt: Cents = if summe <= 0 {
+            0
+        } else if self.rabatt_betrag > 0 {
+            self.rabatt_betrag.min(summe)
+        } else {
+            (summe as f64 * self.rabatt_prozent.clamp(0.0, 100.0) / 100.0).round() as Cents
+        };
+        let mut rabatt_saetze = Vec::new();
+        if rabatt > 0 {
+            let n = by.len();
+            let mut verteilt = 0;
+            for (i, (r, b)) in by.iter_mut().enumerate() {
+                let teil = if i + 1 == n { rabatt - verteilt } else { (rabatt as f64 * *b as f64 / summe as f64).round() as Cents };
+                verteilt += teil;
+                *b -= teil;
+                rabatt_saetze.push((*r, teil));
+            }
+        }
+        let netto = summe - rabatt;
         let steuern: Vec<(u8, Cents, Cents)> = by
             .into_iter()
             .filter(|(r, _)| *r > 0)
             .map(|(r, b)| (r, b, money::tax_of_net(b, r)))
             .collect();
         let ust: Cents = steuern.iter().map(|s| s.2).sum();
-        Summen { netto, steuern, ust, brutto: netto + ust }
+        Summen { positionen: summe, rabatt, rabatt_saetze, netto, steuern, ust, brutto: netto + ust }
+    }
+
+    /// Skontobetrag (vom Bruttobetrag), 0 ohne Skonto.
+    pub fn skonto_betrag(&self) -> Cents {
+        if self.art != DokArt::Rechnung || self.skonto_prozent <= 0.0 {
+            return 0;
+        }
+        (self.summen().brutto as f64 * self.skonto_prozent.min(100.0) / 100.0).round() as Cents
+    }
+
+    /// Letzter Tag für den Skontoabzug.
+    pub fn skonto_bis(&self) -> String {
+        date::add_days(&self.datum, self.skonto_tage as i64)
     }
 
     /// Unbezahlte, versendete Rechnung mit überschrittener Frist?
@@ -647,9 +818,14 @@ impl Dokument {
         self.zahlungen.iter().map(|z| z.betrag).sum()
     }
 
+    /// Gewährte Nachlässe (Skonto).
+    pub fn nachlass(&self) -> Cents {
+        self.zahlungen.iter().map(|z| z.nachlass).sum()
+    }
+
     /// Noch offener Betrag (inkl. Mahnkosten).
     pub fn rest(&self) -> Cents {
-        (self.forderung() - self.gezahlt()).max(0)
+        (self.forderung() - self.gezahlt() - self.nachlass()).max(0)
     }
 
     pub fn teilbezahlt(&self) -> bool {
@@ -870,11 +1046,24 @@ pub struct Leistung {
     pub einheit: String,
     pub preis: Cents,
     pub ust: u8,
+    /// Einkaufspreis netto
+    pub ek: Cents,
+    pub kategorie: String,
 }
 
 impl Default for Leistung {
     fn default() -> Self {
-        Leistung { id: 0, text: String::new(), einheit: "Std.".into(), preis: 0, ust: 19 }
+        Leistung { id: 0, text: String::new(), einheit: "Std.".into(), preis: 0, ust: 19, ek: 0, kategorie: String::new() }
+    }
+}
+
+impl Leistung {
+    /// Marge in Prozent vom Verkaufspreis (None ohne Einkaufspreis).
+    pub fn marge(&self) -> Option<f64> {
+        if self.ek <= 0 || self.preis <= 0 {
+            return None;
+        }
+        Some((self.preis - self.ek) as f64 / self.preis as f64 * 100.0)
     }
 }
 
@@ -902,6 +1091,7 @@ pub struct Data {
     pub buchungen: Vec<Buchung>,
     pub katalog: Vec<Leistung>,
     pub dateien: Vec<Datei>,
+    pub termine: Vec<super::termine::Termin>,
     /// Nummernkreise: „RE-2026“ → zuletzt vergebene Nummer
     pub zaehler: BTreeMap<String, u32>,
     pub next_id: Id,
@@ -926,6 +1116,7 @@ impl Data {
             .chain(d.buchungen.iter().map(|x| x.id))
             .chain(d.katalog.iter().map(|x| x.id))
             .chain(d.dateien.iter().map(|x| x.id))
+            .chain(d.termine.iter().map(|x| x.id))
             .max()
             .unwrap_or(0);
         d.next_id = d.next_id.max(max + 1);
@@ -949,7 +1140,7 @@ impl Data {
                 if let Some(x) = d.dokument_mut(id) {
                     let betrag = if betrag > 0 { betrag } else { x.summen().brutto };
                     let datum = x.bezahlt_am.clone();
-                    x.zahlungen.push(Zahlung { id: zid, datum, betrag, zahlart, buchungen: bids });
+                    x.zahlungen.push(Zahlung { id: zid, datum, betrag, zahlart, buchungen: bids, nachlass: 0 });
                 }
             }
             d.version = 2;
@@ -1070,6 +1261,7 @@ impl Data {
                     einheit: "Pausch.".into(),
                     preis: a.wert,
                     ust: f.ust_satz(),
+                    ..Default::default()
                 });
             }
         }
@@ -1093,6 +1285,18 @@ impl Data {
             kleinunternehmer: f.kleinunternehmer,
             ..Default::default()
         });
+        // Konditionen des Kunden bzw. Standardwerte
+        let k = kunde_rec.unwrap_or_default();
+        if let Some(d) = self.dokument_mut(id) {
+            d.rabatt_prozent = k.rabatt.clamp(0.0, 100.0);
+            if art == DokArt::Rechnung {
+                if let Some(z) = k.zahlungsziel {
+                    d.faellig = date::add_days(heute, z as i64);
+                }
+                d.skonto_prozent = k.skonto.unwrap_or(f.skonto_prozent).max(0.0);
+                d.skonto_tage = f.skonto_tage;
+            }
+        }
         id
     }
 
@@ -1230,30 +1434,40 @@ impl Data {
     }
 
     /// Zahlungseingang (auch Teilzahlung) erfassen und als Einnahme buchen.
-    ///
-    /// Die Zahlung deckt zuerst den Rechnungsbetrag – aufgeteilt nach Steuersätzen –, ein Rest
-    /// gilt für Mahngebühren/Verzugszinsen (nicht umsatzsteuerbar, „Sonstige Einnahmen“).
-    /// Liefert die ID der ersten Buchung.
     pub fn zahlung_erfassen(&mut self, dok: Id, datum: &str, betrag: Cents, zahlart: &str) -> Option<Id> {
+        self.zahlung_mit_nachlass(dok, datum, betrag, 0, zahlart)
+    }
+
+    /// Zahlung mit Nachlass (Skonto) erfassen.
+    ///
+    /// Zahlung + Nachlass decken zuerst den Rechnungsbetrag. Gebucht wird nur der tatsächlich
+    /// gezahlte Teil, aufgeteilt nach Steuersätzen – so mindert ein Skonto Umsatz und Umsatzsteuer
+    /// anteilig. Ein Rest gilt für Mahngebühren/Verzugszinsen (nicht umsatzsteuerbar).
+    /// Liefert die ID der ersten Buchung.
+    pub fn zahlung_mit_nachlass(&mut self, dok: Id, datum: &str, betrag: Cents, nachlass: Cents, zahlart: &str) -> Option<Id> {
         let d = self.dokument(Some(dok))?.clone();
-        if betrag <= 0 {
+        let nachlass = nachlass.max(0);
+        if betrag <= 0 && nachlass <= 0 {
             return None;
         }
         let brutto = d.summen().brutto;
-        let vorher_auf_rechnung = d.gezahlt().clamp(0, brutto.max(0));
-        let rechnungsteil = betrag.min((brutto - vorher_auf_rechnung).max(0));
-        let kostenteil = betrag - rechnungsteil;
+        let erledigt_vorher = (d.gezahlt() + d.nachlass()).clamp(0, brutto.max(0));
+        let offen_rechnung = (brutto - erledigt_vorher).max(0);
+        let nachlass = nachlass.min(offen_rechnung);
+        let rechnungsteil = (betrag + nachlass).min(offen_rechnung);
+        let bar_rechnung = (rechnungsteil - nachlass).max(0);
+        let kostenteil = (betrag - bar_rechnung).max(0);
         let partner = self.kunden_name(d.kunde_id);
         let mut ids = Vec::new();
         let saetze = d.brutto_je_satz();
-        if rechnungsteil > 0 {
+        if bar_rechnung > 0 {
             let mut verteilt = 0;
             let n = saetze.len();
             for (i, (rate, anteil)) in saetze.iter().enumerate() {
                 let teil = if i + 1 == n {
-                    rechnungsteil - verteilt
+                    bar_rechnung - verteilt
                 } else {
-                    (rechnungsteil as f64 * *anteil as f64 / brutto.max(1) as f64).round() as Cents
+                    (bar_rechnung as f64 * *anteil as f64 / brutto.max(1) as f64).round() as Cents
                 };
                 verteilt += teil;
                 if teil == 0 {
@@ -1263,7 +1477,9 @@ impl Data {
                 if n > 1 {
                     text += &format!(" ({} %)", rate);
                 }
-                if rechnungsteil < brutto - vorher_auf_rechnung || vorher_auf_rechnung > 0 {
+                if nachlass > 0 {
+                    text += " – mit Skonto";
+                } else if rechnungsteil < offen_rechnung || erledigt_vorher > 0 {
                     text += " – Teilzahlung";
                 }
                 let bid = self.new_id();
@@ -1304,7 +1520,7 @@ impl Data {
         let first = ids.first().copied();
         let mut fertig = false;
         if let Some(x) = self.dokument_mut(dok) {
-            x.zahlungen.push(Zahlung { id: zid, datum: datum.into(), betrag, zahlart: zahlart.into(), buchungen: ids });
+            x.zahlungen.push(Zahlung { id: zid, datum: datum.into(), betrag: betrag.max(0), zahlart: zahlart.into(), buchungen: ids, nachlass });
             if x.rest() == 0 {
                 x.status = DokStatus::Bezahlt;
                 x.bezahlt_am = datum.into();
@@ -1417,6 +1633,11 @@ impl Data {
     /// Kunde löschen; Verweise in Aufträgen/Dokumenten bleiben als Text (Anschrift) erhalten.
     pub fn kunde_loeschen(&mut self, id: Id) {
         self.kunden.retain(|k| k.id != id);
+        for t in &mut self.termine {
+            if t.kunde_id == Some(id) {
+                t.kunde_id = None;
+            }
+        }
         for a in &mut self.auftraege {
             if a.kunde_id == Some(id) {
                 a.kunde_id = None;
@@ -1431,6 +1652,11 @@ impl Data {
 
     pub fn auftrag_loeschen(&mut self, id: Id) {
         self.auftraege.retain(|k| k.id != id);
+        for t in &mut self.termine {
+            if t.auftrag_id == Some(id) {
+                t.auftrag_id = None;
+            }
+        }
         for d in &mut self.dokumente {
             if d.auftrag_id == Some(id) {
                 d.auftrag_id = None;
@@ -1538,8 +1764,8 @@ mod tests {
     fn sums_mixed_rates() {
         let mut doc = Dokument {
             positionen: vec![
-                Position { text: "A".into(), menge: 2.0, einheit: "Std.".into(), preis: 5000, ust: 19 },
-                Position { text: "B".into(), menge: 1.5, einheit: "kg".into(), preis: 1000, ust: 7 },
+                Position { text: "A".into(), menge: 2.0, einheit: "Std.".into(), preis: 5000, ust: 19, ..Default::default() },
+                Position { text: "B".into(), menge: 1.5, einheit: "kg".into(), preis: 1000, ust: 7, ..Default::default() },
             ],
             ..Default::default()
         };
@@ -1602,8 +1828,8 @@ mod tests {
         {
             let x = d.dokument_mut(r).unwrap();
             x.positionen = vec![
-                Position { text: "A".into(), menge: 1.0, einheit: "Stk.".into(), preis: 10_000, ust: 19 },
-                Position { text: "B".into(), menge: 1.0, einheit: "Stk.".into(), preis: 10_000, ust: 7 },
+                Position { text: "A".into(), menge: 1.0, einheit: "Stk.".into(), preis: 10_000, ust: 19, ..Default::default() },
+                Position { text: "B".into(), menge: 1.0, einheit: "Stk.".into(), preis: 10_000, ust: 7, ..Default::default() },
             ];
             x.status = DokStatus::Versendet;
         }
@@ -1716,6 +1942,68 @@ mod tests {
         d.unterschrift_entfernen(ls);
         assert_eq!(d.dokument(Some(ls)).unwrap().status, DokStatus::Versendet);
         assert_eq!(DokArt::from_key("ab"), Some(DokArt::Auftragsbestaetigung));
+    }
+
+    #[test]
+    fn position_types_and_numbers() {
+        let pos = vec![
+            Position { art: PosArt::Titel, text: "Bad".into(), ..Default::default() },
+            Position { text: "Fliesen".into(), menge: 10.0, preis: 4_000, ..Default::default() },
+            Position { art: PosArt::Text, text: "Hinweis".into(), preis: 99_999, ..Default::default() },
+            Position { art: PosArt::Optional, text: "Bordüre".into(), menge: 1.0, preis: 5_000, ..Default::default() },
+            Position { art: PosArt::Titel, text: "Küche".into(), ..Default::default() },
+            Position { text: "Armatur".into(), menge: 1.0, preis: 20_000, rabatt: 10.0, ..Default::default() },
+        ];
+        assert_eq!(positionsnummern(&pos), vec!["1", "1.1", "", "1.2", "2", "2.1"]);
+        assert_eq!(zwischensummen(&pos), vec![(0, 40_000), (4, 18_000)]);
+        let doc = Dokument { positionen: pos, ..Default::default() };
+        let s = doc.summen();
+        assert_eq!(s.netto, 58_000);
+        assert_eq!(doc.positionen[5].rabatt_betrag(), 2_000);
+    }
+
+    #[test]
+    fn total_discount_split_by_rate() {
+        let mut doc = Dokument {
+            positionen: vec![
+                Position { text: "A".into(), menge: 1.0, preis: 30_000, ust: 19, ..Default::default() },
+                Position { text: "B".into(), menge: 1.0, preis: 10_000, ust: 7, ..Default::default() },
+            ],
+            rabatt_prozent: 10.0,
+            ..Default::default()
+        };
+        let s = doc.summen();
+        assert_eq!((s.positionen, s.rabatt, s.netto), (40_000, 4_000, 36_000));
+        assert_eq!(s.rabatt_saetze, vec![(7, 1_000), (19, 3_000)]);
+        assert_eq!(s.steuern, vec![(7, 9_000, 630), (19, 27_000, 5_130)]);
+        doc.rabatt_betrag = 5_000;
+        assert_eq!(doc.summen().netto, 35_000);
+    }
+
+    #[test]
+    fn skonto_payment_reduces_revenue_and_vat() {
+        let (mut d, k) = demo();
+        d.kunde_mut(k).unwrap().skonto = Some(2.0);
+        d.kunde_mut(k).unwrap().zahlungsziel = Some(30);
+        let r = d.neues_dokument(DokArt::Rechnung, Some(k), None, "2026-11-01");
+        {
+            let x = d.dokument_mut(r).unwrap();
+            assert_eq!(x.skonto_prozent, 2.0);
+            assert_eq!(x.faellig, "2026-12-01");
+            x.positionen[0].preis = 100_000;
+            x.status = DokStatus::Versendet;
+        }
+        let x = d.dokument(Some(r)).unwrap();
+        assert_eq!(x.skonto_betrag(), 2_380);
+        assert_eq!(x.skonto_bis(), "2026-11-08");
+        // 1.190,00 − 23,80 Skonto = 1.166,20 € überwiesen
+        d.zahlung_mit_nachlass(r, "2026-11-05", 116_620, 2_380, "Überweisung");
+        let x = d.dokument(Some(r)).unwrap();
+        assert_eq!(x.status, DokStatus::Bezahlt);
+        assert_eq!(x.rest(), 0);
+        let b = &d.buchungen[0];
+        assert_eq!((b.brutto, b.netto(), b.steuer()), (116_620, 98_000, 18_620));
+        assert!(b.text.contains("Skonto"));
     }
 
     #[test]

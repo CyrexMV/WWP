@@ -36,6 +36,14 @@ Kunden, Aufträge, Angebote, Rechnungen und Finanzen an einem Ort – **komplett
 - **Unterschrift per S-Pen**: Der Kunde unterschreibt direkt auf dem Tablet (Druckstufen, Handballen wird
   ignoriert) – Angebot angenommen, Auftrag bestätigt oder Leistung abgenommen; die Unterschrift erscheint als
   Vektor-Tinte mit Ort, Datum und Name im PDF, der Auftrag läuft automatisch mit
+- **E-Rechnung**: Rechnungs-PDFs sind PDF/A-3 mit eingebetteten Rechnungsdaten nach EN 16931 (**ZUGFeRD/Factur-X**);
+  zusätzlich **XRechnung 3.0** als XML-Datei (z. B. für Behörden mit Leitweg-ID). Vor dem Versand werden die
+  Pflichtangaben geprüft; die Ausgabe ist gegen das offizielle XSD und die EN-16931-/XRechnung-Prüfregeln getestet
+- **Positionsarten**: Titel mit Zwischensumme (Nummern 1, 1.1, 1.2 …), Hinweistexte ohne Preis, optionale
+  Positionen (werden angezeigt, aber nicht summiert); Positionen per Ziehen am Griff umsortieren
+- **Rabatt & Skonto**: Positionsrabatt in %, Gesamtrabatt in % oder €, Skonto mit Frist (Hinweis auf der Rechnung,
+  beim Zahlungseingang mit einem Tipp – Umsatz und Umsatzsteuer werden anteilig gemindert); Standardwerte je Kunde
+- **Leistungskatalog** mit Einkaufspreis, Marge, Kategorien und Suche
 - **GiroCode** (EPC-QR-Code) auf Rechnungen und Mahnungen: Banking-App scannen, Empfänger, IBAN, Betrag und
   Verwendungszweck sind ausgefüllt; IBAN-Prüfung in den Einstellungen
 - **Mahnwesen**: Zahlungserinnerung → 1. Mahnung → 2. Mahnung mit eigenen Fristen, Gebühren und Texten,
@@ -47,6 +55,11 @@ Kunden, Aufträge, Angebote, Rechnungen und Finanzen an einem Ort – **komplett
 - **Kleinunternehmer** (§ 19 UStG): keine Umsatzsteuer, Hinweis auf der Rechnung
 - Standardtexte (Einleitung, Schluss, E-Mail) mit Platzhaltern wie `{betrag}`, `{faellig}`, `{nummer}`
 - „Briefbogen-Vorschau“ in den Einstellungen zeigt eine Musterrechnung mit deinen Daten
+
+**Kalender**
+- Termine mit Uhrzeit, mehrtägig oder ganztägig, Ort, Auftrag und Kunde; Wochen- und Monatsansicht,
+  Fristen der Aufträge werden mit angezeigt, nächste Termine auf der Übersicht, beim Auftrag und beim Kunden
+- Termin mit einem Tipp in die Kalender-App des Tablets übernehmen (im Browser als .ics), Route in Google Maps
 
 **Einnahmen- und Ausgaben-Tracker**
 - „Als bezahlt markieren“ bucht die Einnahme automatisch (bei gemischten Steuersätzen getrennt)
@@ -114,6 +127,10 @@ src/engine/   Geschäftslogik (reines Rust, getestet)
   report.rs     Jahres-/Monats-/Quartalsauswertung, CSV-Export
   backup.rs     Komplett-Backup, Base64, Beispieldaten
   girocode.rs   GiroCode (EPC-QR-Code) und IBAN-Prüfung
+  erechnung.rs  E-Rechnung (CII-XML für ZUGFeRD EN 16931 und XRechnung 3.0), Pflichtangaben-Prüfung
+  pdfa.rs       PDF/A-3: sRGB-Farbprofil, XMP-Metadaten mit Factur-X-Erweiterung
+  ttf.rs        TrueType-Leser und Teilmengen für eingebettete Schriften (Liberation Sans, OFL)
+  termine.rs    Termine, Kalenderwochen, iCalendar-Export
   image.rs      PNG/JPEG für das Logo
 src/web/      Oberfläche (wasm-bindgen / web-sys)
   mod.rs        App-Zustand, Navigation, Ereignisse
@@ -122,6 +139,9 @@ src/web/      Oberfläche (wasm-bindgen / web-sys)
   storage.rs    IndexedDB, Dateien (Logo, Belege), Backup, Android-Brücke
   signature.rs  Unterschriftenfeld (S-Pen, Druck, Handballen-Filter)
   settings.rs   Einstellungen mit Bereichen und Live-Vorschau
+  kalender.rs   Wochen-/Monatsansicht, Termin-Dialog
+  dnd.rs        Positionen per Ziehen umsortieren
+assets/fonts/ eingebettete Schriften (Liberation Sans, WinAnsi-Teilmenge) mit Lizenz
 web/          index.html, style.css, Manifest, Icons, Service Worker
 android/      Android-Hülle (WebView) mit Brücke für Speichern, PDF öffnen, E-Mail/Teilen und Kamera
 ```

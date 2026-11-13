@@ -467,6 +467,57 @@ pub fn open_file(bytes: &[u8], mime: &str, name: &str) {
     });
 }
 
+/// Webadresse in einer anderen App öffnen (z. B. Google Maps).
+pub fn open_url(url: &str) {
+    if let Some(r) = bridge_call("openUrl", &[url.into()]) {
+        if r.as_bool().unwrap_or(false) {
+            return;
+        }
+    }
+    let _ = window().open_with_url_and_target(url, "_blank");
+}
+
+/// Termin in die Kalender-App übernehmen (Android), sonst als .ics-Datei speichern.
+pub fn kalender_eintragen(t: &crate::engine::termine::Termin, beschreibung: &str, ics: &str) {
+    let (y, m, d) = crate::engine::date::parse(&t.datum).unwrap_or((2026, 1, 1));
+    let (ye, me, de) = crate::engine::date::parse(&t.letzter_tag()).unwrap_or((y, m, d));
+    let hm = |s: &str, std: (i32, i32)| -> (i32, i32) {
+        let mut it = s.trim().split(':');
+        match (it.next().and_then(|h| h.parse().ok()), it.next().and_then(|m| m.parse().ok())) {
+            (Some(h), Some(m)) => (h, m),
+            _ => std,
+        }
+    };
+    let (beginn, ende) = if t.ganztag() {
+        // ganztägig: Mitternacht UTC (so erwartet es der Android-Kalender)
+        let b = js_sys::Date::utc(y as f64, (m - 1) as f64);
+        let b = b + (d as f64 - 1.0) * 86_400_000.0;
+        let e = js_sys::Date::utc(ye as f64, (me - 1) as f64) + de as f64 * 86_400_000.0;
+        (b, e)
+    } else {
+        let (h1, m1) = hm(&t.von, (9, 0));
+        let (h2, m2) = hm(&t.bis, (h1 + 1, m1));
+        let b = js_sys::Date::new_with_year_month_day_hr_min(y as u32, m as i32 - 1, d as i32, h1, m1).get_time();
+        let e = js_sys::Date::new_with_year_month_day_hr_min(ye as u32, me as i32 - 1, de as i32, h2, m2).get_time();
+        (b, e.max(b + 15.0 * 60_000.0))
+    };
+    let args = [
+        JsValue::from_str(&t.titel),
+        JsValue::from_f64(beginn),
+        JsValue::from_f64(ende),
+        JsValue::from_bool(t.ganztag()),
+        JsValue::from_str(t.ort.trim()),
+        JsValue::from_str(beschreibung),
+    ];
+    if let Some(r) = bridge_call("calendarInsert", &args) {
+        if r.as_bool().unwrap_or(false) {
+            return;
+        }
+    }
+    let name = format!("Termin-{}.ics", t.datum);
+    save_file(ics.as_bytes(), "text/calendar", &name);
+}
+
 /// Datei per E-Mail/Teilen-Menü versenden. `to`, `subject`, `text` füllen die E-Mail vor.
 pub fn share_file(bytes: &[u8], mime: &str, name: &str, to: &str, subject: &str, text: &str) {
     let b64 = b64_encode(bytes);

@@ -6,6 +6,8 @@
 //! * Suchfelder mit `data-search` → nur die Liste wird neu gezeichnet (Fokus bleibt erhalten)
 
 mod actions;
+mod dnd;
+mod kalender;
 mod settings;
 mod signature;
 mod storage;
@@ -46,6 +48,7 @@ pub enum View {
     Dokument(Id),
     Finanzen,
     Buchung(Id),
+    Kalender,
     Einstellungen,
 }
 
@@ -64,6 +67,11 @@ pub struct Ui {
     pub entsperrt: HashSet<Id>,
     /// geöffneter Bereich der Einstellungen
     pub settings_tab: String,
+    /// Rechnungen, die trotz unvollständiger E-Rechnung gesendet werden dürfen
+    pub e_ok: HashSet<Id>,
+    /// Kalender: angezeigter Tag und Ansicht („woche“/„monat“)
+    pub kal_tag: String,
+    pub kal_ansicht: String,
 }
 
 /// Aktion, die nach „Ja“ in einer Sicherheitsabfrage ausgeführt wird.
@@ -83,6 +91,8 @@ pub struct App {
     pub loaded: bool,
     /// offenes Unterschriftenfeld
     pub pad: Option<signature::Pad>,
+    /// laufendes Verschieben einer Position
+    pub drag: Option<dnd::Drag>,
 }
 
 impl App {
@@ -99,6 +109,7 @@ impl App {
             save_gen: 0,
             loaded: false,
             pad: None,
+            drag: None,
         }
     }
 
@@ -480,6 +491,7 @@ pub fn start() {
 
     storage::bind_files();
     signature::bind();
+    dnd::bind();
     storage::init_storage();
     storage::register_service_worker();
     with_app(|a| a.render());

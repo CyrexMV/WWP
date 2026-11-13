@@ -8,6 +8,7 @@ use crate::engine::model::*;
 use crate::engine::money::{parse_amount, parse_decimal};
 use crate::engine::pdf;
 use crate::engine::report;
+use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::spawn_local;
 
 /// Dateiname aus Nummer und Kunde: „Rechnung_RE-2026-0001_Baeckerei-Schoen.pdf“
@@ -45,7 +46,14 @@ enum Out {
 impl App {
     fn pdf_of(&self, id: Id) -> Option<(Vec<u8>, String)> {
         let x = self.data.dokument(Some(id))?;
-        let bytes = pdf::dokument_pdf(&self.data, x, self.logo.as_deref());
+        let zugferd = x.art == DokArt::Rechnung
+            && self.data.firma.zugferd
+            && crate::engine::erechnung::gueltig(&self.data, x, crate::engine::erechnung::Profil::Zugferd);
+        let bytes = if zugferd {
+            pdf::zugferd_pdf(&self.data, x, self.logo.as_deref())
+        } else {
+            pdf::dokument_pdf(&self.data, x, self.logo.as_deref())
+        };
         Some((bytes, file_name(x, &self.data)))
     }
 
@@ -151,6 +159,7 @@ impl App {
                     "angebote" => View::Dokumente(DokArt::Angebot),
                     "rechnungen" => View::Dokumente(DokArt::Rechnung),
                     "finanzen" => View::Finanzen,
+                    "kalender" => View::Kalender,
                     "einstellungen" => View::Einstellungen,
                     _ => View::Start,
                 };
@@ -384,6 +393,22 @@ impl App {
                         return;
                     }
                 }
+                if let Some(x) = self.data.dokument(Some(id)) {
+                    let will_e = x.art == DokArt::Rechnung && self.data.kunde(x.kunde_id).map(|k| k.erechnung).unwrap_or(false);
+                    if will_e && !self.ui.e_ok.contains(&id) {
+                        use crate::engine::erechnung::{pruefen, Profil};
+                        let fehlt: Vec<String> = pruefen(&self.data, x, Profil::Zugferd).into_iter().filter(|b| b.0).map(|b| b.1).collect();
+                        if !fehlt.is_empty() {
+                            let msg = format!("Der Kunde erwartet eine E-Rechnung, es fehlen aber Angaben: {}. Ohne diese wird ein normales PDF gesendet.", fehlt.join("; "));
+                            self.ask("E-Rechnung unvollständig", &msg, "Trotzdem senden", false, move |a| {
+                                a.ui.e_ok.insert(id);
+                                a.action("dok-send", Some(id), "");
+                            });
+                            return;
+                        }
+                    }
+                }
+                self.ui.e_ok.remove(&id);
                 self.output_doc(id, Out::Send);
             }
             "mahn-new" => {
@@ -474,7 +499,12 @@ impl App {
                     self.toast("Bitte einen Betrag eingeben");
                     return;
                 }
-                self.data.zahlung_erfassen(id, &datum, betrag, &za);
+                let nachlass = if super::checked_of("pay-skonto") {
+                    super::query("#pay-skonto").and_then(|e| e.get_attribute("data-v")).and_then(|v| v.parse::<i64>().ok()).unwrap_or(0)
+                } else {
+                    0
+                };
+                self.data.zahlung_mit_nachlass(id, &datum, betrag, nachlass, &za);
                 self.close_modal();
                 self.changed();
                 self.render();
@@ -542,8 +572,9 @@ impl App {
             "pos-add" => {
                 if let View::Dokument(id) = self.view() {
                     let ust = self.data.firma.ust_satz();
+                    let art = PosArt::from_key(v).unwrap_or(PosArt::Normal);
                     if let Some(x) = self.data.dokument_mut(id) {
-                        x.positionen.push(Position { ust, ..Default::default() });
+                        x.positionen.push(Position { art, ust, ..Default::default() });
                     }
                     self.changed();
                     self.render();
@@ -575,11 +606,106 @@ impl App {
                 self.render();
             }
             "pos-katalog" => self.katalog_modal(),
+            "kal-ansicht" => {
+                self.ui.kal_ansicht = v.to_string();
+                self.render();
+            }
+            "kal-nav" => self.kal_nav(v),
+            "kal-tag" => {
+                self.ui.kal_tag = v.to_string();
+                self.ui.kal_ansicht = "woche".into();
+                self.render();
+            }
+            "kal-ics" => self.kal_ics_alle(),
+            "termin-neu" => {
+                let datum = if date::parse(v).is_some() {
+                    v.to_string()
+                } else if self.view() == View::Kalender && date::parse(&self.ui.kal_tag).is_some() {
+                    self.ui.kal_tag.clone()
+                } else {
+                    heute.clone()
+                };
+                let auftrag = id.filter(|i| self.data.auftrag(Some(*i)).is_some());
+                let kunde = match self.view() {
+                    View::Kunden(k) => k,
+                    _ => None,
+                };
+                let t = self.termin_entwurf(&datum, auftrag, kunde);
+                self.termin_modal(t);
+            }
+            "termin-open" => {
+                if let Some(t) = self.data.termin(id).cloned() {
+                    self.termin_modal(t);
+                }
+            }
+            "termin-save" => self.termin_save(id),
+            "termin-del" => {
+                let Some(id) = id else { return };
+                self.ask("Termin löschen?", "Der Termin wird aus WWP gelöscht (nicht aus der Kalender-App).", "Löschen", true, move |a| {
+                    a.data.termine.retain(|t| t.id != id);
+                    a.changed();
+                    a.render();
+                });
+            }
+            "termin-export" => {
+                if let Some(id) = id {
+                    self.termin_export(id);
+                }
+            }
+            "termin-route" => {
+                if let Some(t) = self.data.termin(id) {
+                    let url = format!("https://www.google.com/maps/search/?api=1&query={}", String::from(js_sys::encode_uri_component(t.ort.trim())));
+                    storage::open_url(&url);
+                }
+            }
+            "rabatt-einheit" => {
+                let View::Dokument(id) = self.view() else { return };
+                if let Some(x) = self.data.dokument_mut(id) {
+                    let netto = x.summen().positionen;
+                    if v == "eur" && x.rabatt_betrag == 0 {
+                        // Prozent in Betrag umrechnen
+                        x.rabatt_betrag = (netto as f64 * x.rabatt_prozent / 100.0).round() as i64;
+                        if x.rabatt_betrag == 0 {
+                            x.rabatt_betrag = 1;
+                        }
+                        x.rabatt_prozent = 0.0;
+                    } else if v == "pct" && x.rabatt_betrag > 0 {
+                        x.rabatt_prozent = if netto > 0 { ((x.rabatt_betrag as f64 / netto as f64) * 10_000.0).round() / 100.0 } else { 0.0 };
+                        x.rabatt_betrag = 0;
+                    }
+                }
+                self.changed();
+                self.render();
+            }
+            "erech-xml" | "erech-send" => {
+                let Some(id) = id else { return };
+                let Some(x) = self.data.dokument(Some(id)).cloned() else { return };
+                use crate::engine::erechnung::{cii_xml, pruefen, Profil};
+                let fehlt: Vec<String> = pruefen(&self.data, &x, Profil::XRechnung).into_iter().filter(|b| b.0).map(|b| b.1).collect();
+                let xml = cii_xml(&self.data, &x, Profil::XRechnung);
+                let name = format!("XRechnung_{}.xml", x.nummer);
+                if act == "erech-xml" {
+                    if !fehlt.is_empty() {
+                        self.toast("Achtung: Pflichtangaben fehlen – die XML ist noch nicht gültig");
+                    }
+                    save_file(xml.as_bytes(), "application/xml", &name);
+                } else {
+                    let f = self.data.firma.clone();
+                    let k = self.data.kunde(x.kunde_id).cloned();
+                    let to = k.as_ref().map(|k| k.email.trim().to_string()).unwrap_or_default();
+                    let subject = x.fill(&f.mail_betreff_rechnung, &f, k.as_ref());
+                    let body = x.fill(&f.mail_text_rechnung, &f, k.as_ref());
+                    share_file(xml.as_bytes(), "application/xml", &name, &to, &subject, &body);
+                    if x.status == DokStatus::Entwurf {
+                        self.mark_sent(id);
+                    }
+                }
+            }
             "kat-pick" => {
                 let (View::Dokument(did), Some(lid)) = (self.view(), id) else { return };
                 let Some(l) = self.data.katalog.iter().find(|l| l.id == lid).cloned() else { return };
                 if let Some(x) = self.data.dokument_mut(did) {
-                    let p = Position { text: l.text, menge: 1.0, einheit: l.einheit, preis: l.preis, ust: l.ust };
+                    let p = Position { text: l.text, menge: 1.0, einheit: l.einheit, preis: l.preis, ust: l.ust, ..Default::default() };
                     // leere Startposition ersetzen
                     if x.positionen.len() == 1 && x.positionen[0].text.trim().is_empty() && x.positionen[0].preis == 0 {
                         x.positionen[0] = p;
@@ -715,8 +841,8 @@ impl App {
                 if let Some(x) = d.dokument_mut(r) {
                     x.betreff = "Musterrechnung (Vorschau)".into();
                     x.positionen = vec![
-                        Position { text: "Beratung und Planung\nVor-Ort-Termin inkl. Aufmaß".into(), menge: 2.0, einheit: "Std.".into(), preis: 7_500, ust },
-                        Position { text: "Material".into(), menge: 1.0, einheit: "Pausch.".into(), preis: 12_000, ust },
+                        Position { text: "Beratung und Planung\nVor-Ort-Termin inkl. Aufmaß".into(), menge: 2.0, einheit: "Std.".into(), preis: 7_500, ust, ..Default::default() },
+                        Position { text: "Material".into(), menge: 1.0, einheit: "Pausch.".into(), preis: 12_000, ust, ..Default::default() },
                     ];
                 }
                 if let Some(x) = d.dokument(Some(r)) {
@@ -783,6 +909,18 @@ impl App {
                 self.ui.buch_monat = v.parse().unwrap_or(0);
                 set_html("list", &self.buch_list_html());
             }
+            "katalog" => set_html("kat-list", &self.katalog_liste(v)),
+            "pay-skonto" => {
+                // Betrag passend zum Skonto-Schalter vorschlagen
+                let View::Dokument(id) = self.view() else { return };
+                if let Some(x) = self.data.dokument(Some(id)) {
+                    let mit = super::checked_of("pay-skonto");
+                    let b = if mit { x.rest() - x.skonto_betrag() } else { x.rest() };
+                    if let Some(i) = super::query("#pay-betrag").and_then(|e| e.dyn_into::<web_sys::HtmlInputElement>().ok()) {
+                        i.set_value(&crate::engine::money::fmt_num(b));
+                    }
+                }
+            }
             "mahn-stufe" => {
                 if let View::Dokument(id) = self.view() {
                     self.mahn_modal(id, v.parse().unwrap_or(0));
@@ -831,6 +969,11 @@ impl App {
                     "telefon" => k.telefon = s,
                     "ust_id" => k.ust_id = s,
                     "notizen" => k.notizen = s,
+                    "rabatt" => k.rabatt = parse_decimal(v).unwrap_or(0.0).clamp(0.0, 100.0),
+                    "zahlungsziel" => k.zahlungsziel = v.trim().parse().ok(),
+                    "skonto" => k.skonto = parse_decimal(v).map(|x| x.clamp(0.0, 100.0)),
+                    "erechnung" => k.erechnung = checked,
+                    "leitweg_id" => k.leitweg_id = s.trim().to_string(),
                     _ => return,
                 }
                 // Entwürfe dieses Kunden übernehmen die neue Anschrift
@@ -952,6 +1095,9 @@ impl App {
                     "farbe" => f.farbe = s,
                     "logo_breite_mm" => f.logo_breite_mm = v.parse().unwrap_or(45.0),
                     "girocode" => f.girocode = checked,
+                    "zugferd" => f.zugferd = checked,
+                    "skonto_prozent" => f.skonto_prozent = parse_decimal(v).unwrap_or(0.0).clamp(0.0, 100.0),
+                    "skonto_tage" => f.skonto_tage = v.trim().parse().unwrap_or(f.skonto_tage),
                     "verzugszinsen" => f.verzugszinsen = checked,
                     "basiszins" => f.basiszins = parse_decimal(v).unwrap_or(f.basiszins),
                     "mail_betreff_mahnung" => f.mail_betreff_mahnung = s,
@@ -1000,13 +1146,18 @@ impl App {
                 let mut it = rest.splitn(2, '.');
                 let (Some(i), Some(fld)) = (it.next().and_then(|i| i.parse::<usize>().ok()), it.next()) else { return };
                 let Some(l) = self.data.katalog.get_mut(i) else { return };
+                let marge_id = format!("marge-{i}");
                 match fld {
                     "text" => l.text = v.to_string(),
                     "einheit" => l.einheit = v.to_string(),
                     "preis" => l.preis = parse_amount(v).unwrap_or(0),
+                    "ek" => l.ek = parse_amount(v).unwrap_or(0),
+                    "kategorie" => l.kategorie = v.trim().to_string(),
                     "ust" => l.ust = v.parse().unwrap_or(19),
                     _ => return,
                 }
+                let m = super::settings::marge_html(l);
+                set_html(&marge_id, &m);
             }
             _ => return,
         }
@@ -1066,6 +1217,18 @@ impl App {
                     x.kleinunternehmer = checked;
                     rerender = true;
                 }
+                "rabatt" => {
+                    if x.rabatt_betrag > 0 {
+                        x.rabatt_betrag = parse_amount(v).unwrap_or(0).max(0);
+                        if x.rabatt_betrag == 0 {
+                            x.rabatt_prozent = 0.0;
+                        }
+                    } else {
+                        x.rabatt_prozent = parse_decimal(v).unwrap_or(0.0).clamp(0.0, 100.0);
+                    }
+                }
+                "skonto_prozent" => x.skonto_prozent = parse_decimal(v).unwrap_or(0.0).clamp(0.0, 100.0),
+                "skonto_tage" => x.skonto_tage = v.trim().parse().unwrap_or(x.skonto_tage),
                 _ => return false,
             }
         } else {
@@ -1079,15 +1242,23 @@ impl App {
                 "einheit" => p.einheit = v.to_string(),
                 "preis" => p.preis = parse_amount(v).unwrap_or(0),
                 "ust" => p.ust = v.parse().unwrap_or(19),
+                "rabatt" => p.rabatt = parse_decimal(v).unwrap_or(0.0).clamp(0.0, 100.0),
+                "art" => {
+                    p.art = PosArt::from_key(v).unwrap_or(PosArt::Normal);
+                    rerender = true;
+                }
                 _ => return false,
-            }
-            let total = crate::engine::money::fmt_eur(p.netto());
-            if let Some(e) = el(&format!("lt-{i}")) {
-                e.set_text_content(Some(&total));
             }
         }
         let x = self.data.dokument(Some(id)).unwrap();
+        // alle Positionsbeträge und Zwischensummen aktualisieren
+        for (i, t) in super::views::pos_totals(x).iter().enumerate() {
+            if let Some(e) = el(&format!("lt-{i}")) {
+                e.set_text_content(Some(t));
+            }
+        }
         set_html("doc-sum", &self.doc_sum_html(x));
+        set_html("skonto-info", &super::views::skonto_info(x));
         if rerender {
             self.changed();
             self.render();

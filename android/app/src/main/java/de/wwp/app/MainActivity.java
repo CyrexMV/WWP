@@ -10,6 +10,7 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
+import android.provider.CalendarContract;
 import android.provider.MediaStore;
 import android.util.Base64;
 import android.view.View;
@@ -434,6 +435,49 @@ public class MainActivity extends Activity {
                 Intent chooser = Intent.createChooser(send, "Senden mit …");
                 chooser.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
                 runOnUiThread(() -> startActivity(chooser));
+                return true;
+            } catch (Exception e) {
+                return false;
+            }
+        }
+
+        /** Termin in die Kalender-App übernehmen (Samsung Kalender, Google Kalender …). */
+        @JavascriptInterface
+        public boolean calendarInsert(String title, double begin, double end, boolean allDay, String location, String description) {
+            Intent i = new Intent(Intent.ACTION_INSERT)
+                    .setData(CalendarContract.Events.CONTENT_URI)
+                    .putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, (long) begin)
+                    .putExtra(CalendarContract.EXTRA_EVENT_END_TIME, (long) end)
+                    .putExtra(CalendarContract.EXTRA_EVENT_ALL_DAY, allDay)
+                    .putExtra(CalendarContract.Events.TITLE, title)
+                    .putExtra(CalendarContract.Events.EVENT_LOCATION, location)
+                    .putExtra(CalendarContract.Events.DESCRIPTION, description);
+            try {
+                runOnUiThread(() -> {
+                    try {
+                        startActivity(i);
+                    } catch (ActivityNotFoundException e) {
+                        Toast.makeText(MainActivity.this, "Keine Kalender-App gefunden", Toast.LENGTH_SHORT).show();
+                    }
+                });
+                return true;
+            } catch (Exception e) {
+                return false;
+            }
+        }
+
+        /** Webadresse (z. B. Google Maps) in der passenden App öffnen. */
+        @JavascriptInterface
+        public boolean openUrl(String url) {
+            try {
+                Intent i = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+                runOnUiThread(() -> {
+                    try {
+                        startActivity(i);
+                    } catch (ActivityNotFoundException e) {
+                        Toast.makeText(MainActivity.this, "Keine passende App gefunden", Toast.LENGTH_SHORT).show();
+                    }
+                });
                 return true;
             } catch (Exception e) {
                 return false;

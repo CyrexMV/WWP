@@ -2,12 +2,17 @@
 
 pub mod backup;
 pub mod date;
+pub mod erechnung;
+pub mod fonts;
 pub mod girocode;
 pub mod image;
 pub mod model;
 pub mod money;
 pub mod pdf;
+pub mod pdfa;
 pub mod report;
+pub mod termine;
+pub mod ttf;
 
 pub use model::*;
 pub use money::Cents;

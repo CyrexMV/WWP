@@ -99,6 +99,8 @@ public class ShareProvider extends ContentProvider {
         if (n.endsWith(".png")) return "image/png";
         if (n.endsWith(".jpg") || n.endsWith(".jpeg")) return "image/jpeg";
         if (n.endsWith(".csv")) return "text/csv";
+        if (n.endsWith(".xml")) return "application/xml";
+        if (n.endsWith(".ics")) return "text/calendar";
         if (n.endsWith(".json") || n.endsWith(".wwpbackup")) return "application/json";
         return "application/octet-stream";
     }

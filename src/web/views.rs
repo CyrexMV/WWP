@@ -156,6 +156,7 @@ impl App {
             View::Dokumente(art) => self.dokumente_html(art),
             View::Dokument(id) => self.dokument_html(id),
             View::Finanzen => self.finanzen_html(),
+            View::Kalender => self.kalender_html(),
             View::Buchung(id) => self.buchung_html(id),
             View::Einstellungen => self.settings_html(),
         };
@@ -177,6 +178,7 @@ impl App {
                 _ => "angebote",
             },
             View::Finanzen | View::Buchung(_) => "finanzen",
+            View::Kalender => "kalender",
             View::Einstellungen => "einstellungen",
             View::Start => "start",
         };
@@ -195,11 +197,12 @@ impl App {
             None => format!("<div class=\"brand-mark\">{}</div>", ic("logo")),
         };
         format!(
-            "<div class=\"brand\">{logo}<span>{}</span></div>{}{}{}{}{}{}<div class=\"nav-space\"></div>{}<p class=\"save-state\" id=\"save-state\">Gespeichert</p>",
+            "<div class=\"brand\">{logo}<span>{}</span></div>{}{}{}{}{}{}{}<div class=\"nav-space\"></div>{}<p class=\"save-state\" id=\"save-state\">Gespeichert</p>",
             esc(&firm),
             item("start", "home", "Übersicht", 0, false),
             item("kunden", "users", "Kunden", 0, false),
             item("auftraege", "briefcase", "Aufträge", anfragen, false),
+            item("kalender", "calendar", "Kalender", self.data.termine_am(&heute).len(), false),
             item("angebote", "file", "Angebote", 0, false),
             item("rechnungen", "receipt", "Rechnungen", overdue, true),
             item("finanzen", "wallet", "Finanzen", 0, false),
@@ -342,6 +345,24 @@ impl App {
             h += "</div>";
         }
         h += "</div>";
+        // Termine
+        let kommend = d.naechste_termine(&heute, 5);
+        let _ = write!(
+            h,
+            "<div class=\"card\"><div class=\"card-head\"><h2>Termine</h2><div>{}{}</div></div>",
+            btn("nav", "calendar", "Kalender", "ghost sm", None, "kalender"),
+            btn("termin-neu", "plus", "Termin", "ghost sm", None, "")
+        );
+        if kommend.is_empty() {
+            h += "<p class=\"muted pad\">Keine anstehenden Termine.</p>";
+        } else {
+            h += "<div class=\"rows\">";
+            for t in kommend {
+                h += &super::kalender::termin_row(self, t);
+            }
+            h += "</div>";
+        }
+        h += "</div>";
         // letzte Buchungen
         let mut bu: Vec<&Buchung> = d.buchungen.iter().collect();
         bu.sort_by(|x, y| y.datum.cmp(&x.datum).then(y.id.cmp(&x.id)));
@@ -457,6 +478,17 @@ impl App {
         h += &text("USt-IdNr.", "k.ust_id", &k.ust_id, "");
         h += &area("Notizen", "k.notizen", &k.notizen, 3, "");
         h += "</div></div>";
+        let _ = write!(
+            h,
+            "<div class=\"card\"><div class=\"card-head\"><h2>Konditionen &amp; E-Rechnung</h2></div><div class=\"form\"><label class=\"field\"><span>Standardrabatt</span><div class=\"euro unit\"><input type=\"text\" inputmode=\"decimal\" data-f=\"k.rabatt\" value=\"{}\" placeholder=\"0\"><i>%</i></div></label><label class=\"field\"><span>Zahlungsziel</span><div class=\"euro unit\"><input type=\"text\" inputmode=\"numeric\" data-f=\"k.zahlungsziel\" value=\"{}\" placeholder=\"{}\"><i>Tage</i></div></label><label class=\"field\"><span>Skonto</span><div class=\"euro unit\"><input type=\"text\" inputmode=\"decimal\" data-f=\"k.skonto\" value=\"{}\" placeholder=\"{}\"><i>%</i></div></label>{}</div><label class=\"toggle-row\"><div><b>Rechnungen als E-Rechnung</b><span>ZUGFeRD-PDF mit eingebetteten Rechnungsdaten; vor dem Senden werden die Pflichtangaben geprüft.</span></div><input type=\"checkbox\" class=\"tgl\" data-f=\"k.erechnung\"{}></label></div>",
+            if k.rabatt > 0.0 { fmt_qty(k.rabatt) } else { String::new() },
+            k.zahlungsziel.map(|z| z.to_string()).unwrap_or_default(),
+            d.firma.zahlungsziel,
+            k.skonto.map(fmt_qty).unwrap_or_default(),
+            fmt_qty(d.firma.skonto_prozent),
+            text("Leitweg-ID (öffentliche Auftraggeber)", "k.leitweg_id", &k.leitweg_id, "placeholder=\"z. B. 991-12345-67\""),
+            if k.erechnung { " checked" } else { "" }
+        );
 
         let docs = d.dokumente_von(k.id);
         let offen: Cents = docs.iter().filter(|x| x.offen()).map(|x| x.summen().brutto).sum();
@@ -468,6 +500,15 @@ impl App {
             kpi("Aufträge", &d.auftraege_von(k.id).len().to_string(), "gesamt", "", "")
         );
 
+        let heute = today();
+        let ts: Vec<_> = d.naechste_termine(&heute, 50).into_iter().filter(|t| t.kunde_id == Some(k.id)).take(5).collect();
+        if !ts.is_empty() {
+            h += "<div class=\"card\"><div class=\"card-head\"><h2>Nächste Termine</h2></div><div class=\"rows\">";
+            for t in ts {
+                h += &super::kalender::termin_row(self, t);
+            }
+            h += "</div></div>";
+        }
         let auf = d.auftraege_von(k.id);
         if !auf.is_empty() {
             h += "<div class=\"card\"><div class=\"card-head\"><h2>Aufträge &amp; Anfragen</h2></div><div class=\"rows\">";
@@ -642,6 +683,25 @@ impl App {
                 ic("chevron")
             );
         }
+        {
+            let mut ts: Vec<_> = d.termine.iter().filter(|t| t.auftrag_id == Some(a.id)).collect();
+            ts.sort_by(|x, y| (x.datum.as_str(), x.von.as_str()).cmp(&(y.datum.as_str(), y.von.as_str())));
+            let _ = write!(
+                h,
+                "<div class=\"card\"><div class=\"card-head\"><h2>Termine</h2>{}</div>",
+                btn("termin-neu", "plus", "Termin", "ghost sm", Some(a.id), "")
+            );
+            if ts.is_empty() {
+                h += "<p class=\"muted pad\">Noch keine Termine – z. B. Besichtigung oder Ausführung planen.</p>";
+            } else {
+                h += "<div class=\"rows\">";
+                for t in ts {
+                    h += &super::kalender::termin_row(self, t);
+                }
+                h += "</div>";
+            }
+            h += "</div>";
+        }
         let docs: Vec<&Dokument> = d.dokumente.iter().filter(|x| x.auftrag_id == Some(a.id)).collect();
         if !docs.is_empty() {
             let heute = today();
@@ -770,9 +830,47 @@ impl App {
     }
 
     /// Summenblock des Dokument-Editors (wird beim Tippen aktualisiert).
+    /// Status der E-Rechnung mit fehlenden Pflichtangaben.
+    fn erechnung_card(&self, x: &Dokument) -> String {
+        use crate::engine::erechnung::{pruefen, Profil};
+        let zf = pruefen(&self.data, x, Profil::Zugferd);
+        let xr = pruefen(&self.data, x, Profil::XRechnung);
+        let zf_ok = !zf.iter().any(|b| b.0);
+        let xr_ok = !xr.iter().any(|b| b.0);
+        let status = if zf_ok && self.data.firma.zugferd {
+            format!("<span class=\"status-pill ok\">{} ZUGFeRD-Daten im PDF enthalten</span>", ic("check"))
+        } else if zf_ok {
+            "<span class=\"status-pill info\">Bereit – ZUGFeRD ist in den Einstellungen ausgeschaltet</span>".to_string()
+        } else {
+            format!("<span class=\"status-pill warn\">{} Pflichtangaben fehlen</span>", ic("alert"))
+        };
+        let mut liste = String::new();
+        for (pflicht, t) in &zf {
+            let _ = write!(liste, "<li class=\"{}\">{}{}</li>", if *pflicht { "must" } else { "hint" }, ic(if *pflicht { "alert" } else { "info" }), esc(t));
+        }
+        for (pflicht, t) in xr.iter().filter(|b| !zf.contains(b)) {
+            let _ = write!(
+                liste,
+                "<li class=\"{}\">{}{} <em>(nur XRechnung)</em></li>",
+                if *pflicht { "must" } else { "hint" },
+                ic(if *pflicht { "alert" } else { "info" }),
+                esc(t)
+            );
+        }
+        let liste = if liste.is_empty() { String::new() } else { format!("<ul class=\"befunde\">{liste}</ul>") };
+        format!(
+            "<div class=\"card\"><div class=\"card-head\"><h2>E-Rechnung</h2></div><div class=\"pad\">{status}</div>{liste}<div class=\"actions\">{}{}</div></div>",
+            btn("erech-xml", "download", "XRechnung (XML)", "ghost block", Some(x.id), ""),
+            if xr_ok { btn("erech-send", "send", "XRechnung senden", "ghost block", Some(x.id), "") } else { String::new() }
+        )
+    }
+
     pub fn doc_sum_html(&self, x: &Dokument) -> String {
         let s = x.summen();
         let mut h = String::from("<dl class=\"sum\">");
+        if s.rabatt > 0 {
+            let _ = write!(h, "<dt>Zwischensumme</dt><dd>{}</dd><dt>Rabatt</dt><dd>− {}</dd>", fmt_eur(s.positionen), fmt_eur(s.rabatt));
+        }
         if !s.steuern.is_empty() {
             let _ = write!(h, "<dt>Summe netto</dt><dd>{}</dd>", fmt_eur(s.netto));
             for (r, b, t) in &s.steuern {
@@ -865,17 +963,23 @@ impl App {
         }
         h += "<div class=\"positions\">";
         let n = x.positionen.len();
+        let nummern = positionsnummern(&x.positionen);
+        let totals = pos_totals(x);
         for (i, p) in x.positionen.iter().enumerate() {
-            let ust = if x.kleinunternehmer {
-                String::new()
+            let art_sel = if locked {
+                format!("<span class=\"pos-art-tag\">{}</span>", p.art.label())
             } else {
-                select_f("USt.", &format!("p.{i}.ust"), &ust_opts(), &p.ust.to_string(), ds)
+                let mut o = String::new();
+                for a in PosArt::ALLE {
+                    let _ = write!(o, "<option value=\"{}\"{}>{}</option>", a.key(), if a == p.art { " selected" } else { "" }, a.label());
+                }
+                format!("<select class=\"pos-art\" data-f=\"p.{i}.art\" title=\"Art der Position\">{o}</select>")
             };
             let tools = if locked {
                 String::new()
             } else {
                 format!(
-                    "<div class=\"pos-tools\"><button class=\"icon-btn sm\" data-act=\"pos-up\" data-v=\"{i}\" title=\"Nach oben\"{}>{}</button><button class=\"icon-btn sm\" data-act=\"pos-down\" data-v=\"{i}\" title=\"Nach unten\"{}>{}</button><button class=\"icon-btn sm\" data-act=\"pos-dup\" data-v=\"{i}\" title=\"Duplizieren\">{}</button><button class=\"icon-btn sm danger-text\" data-act=\"pos-del\" data-v=\"{i}\" title=\"Entfernen\">{}</button></div>",
+                    "<div class=\"pos-tools\">{art_sel}<span class=\"flex1\"></span><button class=\"icon-btn sm\" data-act=\"pos-up\" data-v=\"{i}\" title=\"Nach oben\"{}>{}</button><button class=\"icon-btn sm\" data-act=\"pos-down\" data-v=\"{i}\" title=\"Nach unten\"{}>{}</button><button class=\"icon-btn sm\" data-act=\"pos-dup\" data-v=\"{i}\" title=\"Duplizieren\">{}</button><button class=\"icon-btn sm danger-text\" data-act=\"pos-del\" data-v=\"{i}\" title=\"Entfernen\">{}</button></div>",
                     dis(i == 0),
                     ic("up"),
                     dis(i + 1 == n),
@@ -884,17 +988,44 @@ impl App {
                     ic("trash")
                 )
             };
+            let griff = if locked {
+                format!("<div class=\"pos-num\">{}</div>", esc(&nummern[i]))
+            } else {
+                format!("<div class=\"pos-num pos-drag\" data-drag=\"{i}\" title=\"Zum Verschieben ziehen\">{}<span>{}</span></div>", ic("grip"), esc(&nummern[i]))
+            };
+            let inhalt = match p.art {
+                PosArt::Titel => format!(
+                    "<div class=\"pos-titel\"><input type=\"text\" data-f=\"p.{i}.text\" value=\"{}\" placeholder=\"Überschrift der Gruppe, z. B. „Badezimmer“\"{ds}><div class=\"pos-total\"><span>Zwischensumme</span><b id=\"lt-{i}\">{}</b></div></div>",
+                    esc(&p.text),
+                    totals[i]
+                ),
+                PosArt::Text => format!(
+                    "<textarea data-f=\"p.{i}.text\" rows=\"2\" placeholder=\"Hinweistext ohne Preis\"{ds}>{}</textarea>",
+                    esc(&p.text)
+                ),
+                _ => {
+                    let ust = if x.kleinunternehmer {
+                        String::new()
+                    } else {
+                        select_f("USt.", &format!("p.{i}.ust"), &ust_opts(), &p.ust.to_string(), ds)
+                    };
+                    let rabatt = if p.rabatt > 0.0 { fmt_qty(p.rabatt) } else { String::new() };
+                    format!(
+                        "<textarea data-f=\"p.{i}.text\" rows=\"2\" placeholder=\"Leistung / Artikel (mehrzeilig: erste Zeile wird fett)\"{ds}>{}</textarea><div class=\"pos-grid\">{}{}{}<label class=\"field\"><span>Rabatt</span><div class=\"euro\"><input type=\"text\" inputmode=\"decimal\" data-f=\"p.{i}.rabatt\" value=\"{rabatt}\" placeholder=\"0\"{ds}><i>%</i></div></label>{}<div class=\"pos-total\"><span>{}</span><b id=\"lt-{i}\">{}</b></div></div>",
+                        esc(&p.text),
+                        text("Menge", &format!("p.{i}.menge"), &fmt_qty(p.menge), &format!("inputmode=\"decimal\"{ds}")),
+                        text("Einheit", &format!("p.{i}.einheit"), &p.einheit, &format!("list=\"einheiten\"{ds}")),
+                        money_f("Einzelpreis (netto)", &format!("p.{i}.preis"), p.preis, &format!("placeholder=\"0,00\"{ds}")),
+                        ust,
+                        if p.art == PosArt::Optional { "Optional" } else { "Gesamt" },
+                        totals[i]
+                    )
+                }
+            };
             let _ = write!(
                 h,
-                "<div class=\"pos\"><div class=\"pos-num\">{}</div><div class=\"pos-body\"><textarea data-f=\"p.{i}.text\" rows=\"2\" placeholder=\"Leistung / Artikel (mehrzeilig: erste Zeile wird fett)\"{ds}>{}</textarea><div class=\"pos-grid\">{}{}{}{}<div class=\"pos-total\"><span>Gesamt</span><b id=\"lt-{i}\">{}</b></div></div></div>{}</div>",
-                i + 1,
-                esc(&p.text),
-                text("Menge", &format!("p.{i}.menge"), &fmt_qty(p.menge), &format!("inputmode=\"decimal\"{ds}")),
-                text("Einheit", &format!("p.{i}.einheit"), &p.einheit, &format!("list=\"einheiten\"{ds}")),
-                money_f("Einzelpreis (netto)", &format!("p.{i}.preis"), p.preis, &format!("placeholder=\"0,00\"{ds}")),
-                ust,
-                fmt_eur(p.netto()),
-                tools
+                "<div class=\"pos art-{}\" data-i=\"{i}\">{griff}<div class=\"pos-body\">{tools}{inhalt}</div></div>",
+                p.art.key()
             );
         }
         h += "<datalist id=\"einheiten\">";
@@ -905,12 +1036,44 @@ impl App {
         if !locked {
             let _ = write!(
                 h,
-                "<div class=\"pos-add\">{}{}</div>",
-                btn("pos-add", "plus", "Position", "ghost", None, ""),
+                "<div class=\"pos-add\">{}{}{}{}{}</div>",
+                btn("pos-add", "plus", "Position", "ghost", None, "normal"),
+                btn("pos-add", "type", "Titel", "ghost", None, "titel"),
+                btn("pos-add", "file", "Text", "ghost", None, "text"),
+                btn("pos-add", "plus", "Optional", "ghost", None, "optional"),
                 btn("pos-katalog", "book", "Aus Leistungskatalog", "ghost", None, "")
             );
         }
         h += "</div>";
+        // Rabatt & Skonto
+        if x.art.mit_preisen() {
+            let einheit = if x.rabatt_betrag > 0 { "eur" } else { "pct" };
+            let wert = if x.rabatt_betrag > 0 {
+                fmt_num(x.rabatt_betrag)
+            } else if x.rabatt_prozent > 0.0 {
+                fmt_qty(x.rabatt_prozent)
+            } else {
+                String::new()
+            };
+            let _ = write!(
+                h,
+                "<div class=\"card\"><div class=\"card-head\"><h2>Rabatt{}</h2></div><div class=\"form\"><label class=\"field\"><span>Gesamtrabatt</span><div class=\"rabatt-row\"><div class=\"euro unit\"><input type=\"text\" inputmode=\"decimal\" data-f=\"d.rabatt\" value=\"{wert}\" placeholder=\"0\"{ds}><i>{}</i></div><div class=\"segmented\"><button class=\"{}\" data-act=\"rabatt-einheit\" data-v=\"pct\"{ds}>%</button><button class=\"{}\" data-act=\"rabatt-einheit\" data-v=\"eur\"{ds}>€</button></div></div></label>",
+                if x.art == DokArt::Rechnung { " &amp; Skonto" } else { "" },
+                if einheit == "eur" { "€" } else { "%" },
+                if einheit == "pct" { "active" } else { "" },
+                if einheit == "eur" { "active" } else { "" }
+            );
+            if x.art == DokArt::Rechnung {
+                let sk = if x.skonto_prozent > 0.0 { fmt_qty(x.skonto_prozent) } else { String::new() };
+                let _ = write!(
+                    h,
+                    "<label class=\"field\"><span>Skonto</span><div class=\"euro unit\"><input type=\"text\" inputmode=\"decimal\" data-f=\"d.skonto_prozent\" value=\"{sk}\" placeholder=\"0\"{ds}><i>%</i></div></label><label class=\"field\"><span>Skontofrist</span><div class=\"euro unit\"><input type=\"text\" inputmode=\"numeric\" data-f=\"d.skonto_tage\" value=\"{}\"{ds}><i>Tage</i></div></label><p class=\"hint wide\" id=\"skonto-info\">{}</p>",
+                    x.skonto_tage,
+                    skonto_info(x)
+                );
+            }
+            h += "</div></div>";
+        }
         // Schluss
         h += "<div class=\"card\"><div class=\"form\">";
         h += &area("Schlusstext", "d.schluss", &x.schluss, 3, ds);
@@ -995,6 +1158,10 @@ impl App {
                 ic("check"),
                 esc(&unter)
             );
+        }
+        // E-Rechnung
+        if x.art == DokArt::Rechnung {
+            h += &self.erechnung_card(x);
         }
         // Zahlungen
         if !x.zahlungen.is_empty() {
@@ -1333,24 +1500,54 @@ impl App {
         self.modal(&html);
     }
 
-    pub fn katalog_modal(&mut self) {
-        let mut h = String::from("<h3>Aus Leistungskatalog einfügen</h3><div class=\"list pick\">");
-        if self.data.katalog.is_empty() {
-            h += "<p class=\"muted pad\">Der Katalog ist noch leer. Lege Leistungen unter Einstellungen → Leistungskatalog an.</p>";
+    pub fn katalog_liste(&self, q: &str) -> String {
+        let q = q.trim().to_lowercase();
+        let mut list: Vec<&Leistung> = self
+            .data
+            .katalog
+            .iter()
+            .filter(|l| q.is_empty() || l.text.to_lowercase().contains(&q) || l.kategorie.to_lowercase().contains(&q))
+            .collect();
+        list.sort_by_key(|a| (a.kategorie.to_lowercase(), a.text.to_lowercase()));
+        if list.is_empty() {
+            return if self.data.katalog.is_empty() {
+                "<p class=\"muted pad\">Der Katalog ist noch leer. Lege Leistungen unter Einstellungen → Leistungskatalog an.</p>".into()
+            } else {
+                "<p class=\"muted pad\">Nichts gefunden.</p>".into()
+            };
         }
-        for l in &self.data.katalog {
+        let mut h = String::new();
+        let mut kat: Option<String> = None;
+        for l in list {
+            let k = if l.kategorie.trim().is_empty() { "Ohne Kategorie".to_string() } else { l.kategorie.trim().to_string() };
+            if kat.as_deref() != Some(k.as_str()) {
+                let _ = write!(h, "<div class=\"kat-head\">{}</div>", esc(&k));
+                kat = Some(k);
+            }
+            let marge = l.marge().map(|m| format!(" · Marge {} %", fmt_qty((m * 10.0).round() / 10.0))).unwrap_or_default();
             let _ = write!(
                 h,
-                "<button class=\"li\" data-act=\"kat-pick\" data-id=\"{}\"><div><b>{}</b><span>{} € je {} · {} % USt.</span></div>{}</button>",
+                "<button class=\"li\" data-act=\"kat-pick\" data-id=\"{}\"><div><b>{}</b><span>{} € je {} · {} % USt.{}</span></div>{}</button>",
                 l.id,
                 esc(if l.text.is_empty() { "Ohne Bezeichnung" } else { &l.text }),
                 fmt_num(l.preis),
                 esc(&l.einheit),
                 l.ust,
+                marge,
                 ic("plus")
             );
         }
-        let _ = write!(h, "</div><div class=\"modal-actions\">{}{}</div>", btn("nav", "settings", "Katalog bearbeiten", "ghost", None, "einstellungen"), btn("modal-close", "", "Fertig", "primary", None, ""));
+        h
+    }
+
+    pub fn katalog_modal(&mut self) {
+        let h = format!(
+            "<h3>Aus Leistungskatalog einfügen</h3><div class=\"search\">{}<input type=\"search\" placeholder=\"Leistung oder Kategorie suchen …\" data-search=\"katalog\" autofocus></div><div class=\"list pick\" id=\"kat-list\">{}</div><div class=\"modal-actions\">{}{}</div>",
+            ic("search"),
+            self.katalog_liste(""),
+            btn("set-tab", "settings", "Katalog bearbeiten", "ghost", None, "katalog"),
+            btn("modal-close", "", "Fertig", "primary", None, "")
+        );
         self.modal(&h);
     }
 
@@ -1385,21 +1582,66 @@ impl App {
 
     pub fn paid_modal(&mut self, id: Id) {
         let Some(x) = self.data.dokument(Some(id)) else { return };
+        let heute = today();
+        let skonto = if x.gezahlt() == 0 && x.mahnkosten() == 0 { x.skonto_betrag() } else { 0 };
+        let mit_skonto = skonto > 0 && heute <= x.skonto_bis();
+        let vorschlag = if mit_skonto { x.rest() - skonto } else { x.rest() };
+        let skonto_html = if skonto > 0 {
+            format!(
+                "<label class=\"toggle-row wide\"><div><b>Mit Skonto ({})</b><span>Frist bis {}{} – der Nachlass mindert Umsatz und Umsatzsteuer anteilig.</span></div><input type=\"checkbox\" class=\"tgl\" id=\"pay-skonto\" data-v=\"{}\" data-search=\"pay-skonto\"{}></label>",
+                fmt_eur(skonto),
+                german(&x.skonto_bis()),
+                if heute > x.skonto_bis() { " (abgelaufen)" } else { "" },
+                skonto,
+                if mit_skonto { " checked" } else { "" }
+            )
+        } else {
+            String::new()
+        };
         let mut za = String::new();
         for z in ZAHLARTEN {
             let _ = write!(za, "<option>{z}</option>");
         }
         let html = format!(
-            "<h3>Zahlung erfassen</h3><p class=\"muted\">Rechnung {} · offen <b>{}</b>. Die Einnahme wird automatisch in den Finanzen gebucht; bei einem kleineren Betrag bleibt der Rest offen (Teilzahlung).</p><div class=\"form\"><label class=\"field\"><span>Betrag</span><div class=\"euro\"><input type=\"text\" inputmode=\"decimal\" id=\"pay-betrag\" value=\"{}\"><i>€</i></div></label><label class=\"field\"><span>Zahlungseingang am</span><input type=\"date\" id=\"pay-date\" value=\"{}\"></label><label class=\"field\"><span>Zahlart</span><select id=\"pay-art\">{za}</select></label></div><div class=\"modal-actions\">{}<button class=\"btn success\" data-act=\"dok-paid-ok\" data-id=\"{id}\" data-enter>{}<span>Zahlung buchen</span></button></div>",
+            "<h3>Zahlung erfassen</h3><p class=\"muted\">Rechnung {} · offen <b>{}</b>. Die Einnahme wird automatisch in den Finanzen gebucht; bei einem kleineren Betrag bleibt der Rest offen (Teilzahlung).</p><div class=\"form\"><label class=\"field\"><span>Betrag</span><div class=\"euro\"><input type=\"text\" inputmode=\"decimal\" id=\"pay-betrag\" value=\"{}\"><i>€</i></div></label><label class=\"field\"><span>Zahlungseingang am</span><input type=\"date\" id=\"pay-date\" value=\"{}\"></label><label class=\"field\"><span>Zahlart</span><select id=\"pay-art\">{za}</select></label>{skonto_html}</div><div class=\"modal-actions\">{}<button class=\"btn success\" data-act=\"dok-paid-ok\" data-id=\"{id}\" data-enter>{}<span>Zahlung buchen</span></button></div>",
             esc(&x.nummer),
             fmt_eur(x.rest()),
-            fmt_num(x.rest()),
+            fmt_num(vorschlag),
             today(),
             btn("modal-close", "", "Abbrechen", "ghost", None, ""),
             ic("check")
         );
         self.modal(&html);
     }
+}
+
+/// Beträge der Positionen für die Anzeige (Titel: Zwischensumme, Text: leer, Optional: in Klammern).
+pub fn pos_totals(x: &Dokument) -> Vec<String> {
+    let zws = zwischensummen(&x.positionen);
+    x.positionen
+        .iter()
+        .enumerate()
+        .map(|(i, p)| match p.art {
+            PosArt::Titel => fmt_eur(zws.iter().find(|z| z.0 == i).map(|z| z.1).unwrap_or(0)),
+            PosArt::Text => String::new(),
+            PosArt::Optional => format!("({})", fmt_eur(p.netto())),
+            PosArt::Normal => fmt_eur(p.netto()),
+        })
+        .collect()
+}
+
+/// Erklärung zum Skonto im Editor.
+pub fn skonto_info(x: &Dokument) -> String {
+    let b = x.skonto_betrag();
+    if b <= 0 {
+        return "Ohne Skonto. Standardwerte unter Einstellungen → Nummern & Fristen bzw. beim Kunden.".into();
+    }
+    format!(
+        "Bei Zahlung bis {}: {} Skonto, Zahlbetrag {}",
+        german(&x.skonto_bis()),
+        fmt_eur(b),
+        fmt_eur(x.summen().brutto - b)
+    )
 }
 
 /// Hinweis unter dem IBAN-Feld.

@@ -7,8 +7,12 @@
 
 use super::date;
 use super::image;
+use super::erechnung;
+use super::fonts;
 use super::girocode;
-use super::model::{briefanrede, Data, DokArt, Dokument, Firma, Kunde, UNTERSCHRIFT_VERHAELTNIS};
+use super::pdfa;
+use super::ttf;
+use super::model::{briefanrede, positionsnummern, zwischensummen, Data, DokArt, Dokument, Firma, Kunde, PosArt, UNTERSCHRIFT_VERHAELTNIS};
 use super::money::{fmt_eur, fmt_num, fmt_qty, Cents};
 use super::report::Auswertung;
 use miniz_oxide::deflate::compress_to_vec_zlib;
@@ -26,7 +30,7 @@ struct Pdf {
 impl Pdf {
     fn new() -> Pdf {
         let mut buf = Vec::new();
-        buf.extend_from_slice(b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n");
+        buf.extend_from_slice(b"%PDF-1.7\n%\xe2\xe3\xcf\xd3\n");
         Pdf { buf, offsets: Vec::new() }
     }
 
@@ -56,6 +60,14 @@ impl Pdf {
     }
 
     fn finish(mut self, root: usize, info: usize) -> Vec<u8> {
+        // Dokument-ID (PDF/A verlangt /ID im Trailer): Prüfsumme über den Inhalt
+        let mut h1: u64 = 0xcbf2_9ce4_8422_2325;
+        let mut h2: u64 = 0x8422_2325_cbf2_9ce4;
+        for &b in &self.buf {
+            h1 = (h1 ^ b as u64).wrapping_mul(0x0100_0000_01b3);
+            h2 = (h2 ^ b as u64).wrapping_mul(0x0000_0100_0000_01b3).rotate_left(5);
+        }
+        let id = format!("{h1:016X}{h2:016X}");
         let xref = self.buf.len();
         let mut s = format!("xref\n0 {}\n0000000000 65535 f \n", self.offsets.len() + 1);
         for o in &self.offsets {
@@ -63,7 +75,7 @@ impl Pdf {
         }
         let _ = write!(
             s,
-            "trailer\n<< /Size {} /Root {} 0 R /Info {} 0 R >>\nstartxref\n{}\n%%EOF\n",
+            "trailer\n<< /Size {} /Root {} 0 R /Info {} 0 R /ID [<{id}> <{id}>] >>\nstartxref\n{}\n%%EOF\n",
             self.offsets.len() + 1,
             root,
             info,
@@ -335,15 +347,57 @@ fn embed_logo(pdf: &mut Pdf, bytes: &[u8]) -> Option<(usize, u32, u32)> {
 }
 
 /// Seiten zu einem PDF zusammensetzen.
-fn assemble(pages: Vec<Canvas>, logo: Option<&[u8]>, title: &str, author: &str) -> Vec<u8> {
+/// Eingebettete XML-Rechnung (ZUGFeRD/Factur-X).
+pub struct Anhang<'a> {
+    pub name: &'a str,
+    pub daten: &'a [u8],
+    /// Factur-X-Profil, z. B. „EN 16931“
+    pub stufe: &'a str,
+}
+
+/// TrueType-Schrift einbetten (PDF/A verlangt eingebettete Schriftprogramme); liefert die Objekt-ID.
+fn embed_font(pdf: &mut Pdf, data: &[u8], name: &str, bold: bool) -> usize {
+    let font = ttf::Font::parse(data).expect("eingebettete Schrift");
+    let m = font.metrics();
+    let widths = font.pdf_widths().iter().map(|w| w.to_string()).collect::<Vec<_>>().join(" ");
+    let file = pdf.reserve();
+    pdf.stream(file, &format!("/Length1 {}", data.len()), data);
+    let desc = pdf.reserve();
+    pdf.obj(
+        desc,
+        &format!(
+            "<< /Type /FontDescriptor /FontName /{name} /Flags 32 /FontBBox [{} {} {} {}] /ItalicAngle {} /Ascent {} /Descent {} /CapHeight {} /StemV {} /FontFile2 {file} 0 R >>",
+            m.bbox[0],
+            m.bbox[1],
+            m.bbox[2],
+            m.bbox[3],
+            n(m.italic_angle),
+            m.ascent,
+            m.descent,
+            m.cap_height,
+            if bold { 140 } else { 80 }
+        ),
+    );
+    let id = pdf.reserve();
+    pdf.obj(
+        id,
+        &format!("<< /Type /Font /Subtype /TrueType /BaseFont /{name} /FirstChar 32 /LastChar 255 /Widths [{widths}] /FontDescriptor {desc} 0 R /Encoding /WinAnsiEncoding >>"),
+    );
+    id
+}
+
+/// Seiten zu einem PDF/A-3b zusammensetzen (eingebettete Schriften, sRGB-Farbprofil, XMP);
+/// optional mit eingebetteter XML-Rechnung (ZUGFeRD/Factur-X).
+fn assemble(pages: Vec<Canvas>, logo: Option<&[u8]>, title: &str, author: &str, datum: &str, anhang: Option<Anhang>) -> Vec<u8> {
+    const PRODUCER: &str = "WWP Buero";
     let mut pdf = Pdf::new();
     let catalog = pdf.reserve();
     let pages_id = pdf.reserve();
-    let f1 = pdf.reserve();
-    let f2 = pdf.reserve();
     let info = pdf.reserve();
-    pdf.obj(f1, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>");
-    pdf.obj(f2, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>");
+    let f1 = embed_font(&mut pdf, fonts::REGULAR, "WWPAAA+LiberationSans", false);
+    let f2 = embed_font(&mut pdf, fonts::BOLD, "WWPAAB+LiberationSans-Bold", true);
+    // CMYK-JPEGs passen nicht zum sRGB-Profil von PDF/A und werden ausgelassen
+    let logo = logo.filter(|b| image::jpeg_info(b).map(|i| i.2 != 4).unwrap_or(true));
     let logo_obj = logo.and_then(|b| embed_logo(&mut pdf, b)).map(|l| l.0);
     let xobj = logo_obj.map(|id| format!(" /XObject << /Logo {id} 0 R >>")).unwrap_or_default();
     let resources = format!("<< /Font << /F1 {f1} 0 R /F2 {f2} 0 R >>{xobj} >>");
@@ -363,8 +417,53 @@ fn assemble(pages: Vec<Canvas>, logo: Option<&[u8]>, title: &str, author: &str) 
         kids.push(format!("{pid} 0 R"));
     }
     pdf.obj(pages_id, &format!("<< /Type /Pages /Kids [{}] /Count {} >>", kids.join(" "), kids.len()));
-    pdf.obj(catalog, &format!("<< /Type /Catalog /Pages {pages_id} 0 R >>"));
-    pdf.obj(info, &format!("<< /Title {} /Author {} /Producer (WWP Buero) >>", pdf_utf16(title), pdf_utf16(author)));
+
+    // Datum für Info und XMP (müssen übereinstimmen)
+    let d = if date::parse(datum).is_some() { datum.replace('-', "") } else { "20260101".into() };
+    let pdf_datum = format!("D:{d}000000+00'00'");
+    let xmp_datum = format!("{}-{}-{}T00:00:00+00:00", &d[0..4], &d[4..6], &d[6..8]);
+
+    // Farbprofil (OutputIntent)
+    let icc = pdf.reserve();
+    pdf.stream(icc, "/N 3", &pdfa::srgb_icc());
+    let oi = pdf.reserve();
+    pdf.obj(
+        oi,
+        &format!("<< /Type /OutputIntent /S /GTS_PDFA1 /OutputConditionIdentifier (sRGB IEC61966-2.1) /Info (sRGB IEC61966-2.1) /RegistryName (http://www.color.org) /DestOutputProfile {icc} 0 R >>"),
+    );
+    // eingebettete Rechnung
+    let mut extra = String::new();
+    let mut fx = None;
+    if let Some(a) = &anhang {
+        let ef = pdf.reserve();
+        pdf.stream(
+            ef,
+            &format!("/Type /EmbeddedFile /Subtype /text#2Fxml /Params << /ModDate ({pdf_datum}) /Size {} >>", a.daten.len()),
+            a.daten,
+        );
+        let fs = pdf.reserve();
+        pdf.obj(
+            fs,
+            &format!(
+                "<< /Type /Filespec /F {name} /UF {name} /Desc (Factur-X/ZUGFeRD-Rechnung) /AFRelationship /Alternative /EF << /F {ef} 0 R /UF {ef} 0 R >> >>",
+                name = pdf_string(a.name)
+            ),
+        );
+        extra = format!(" /Names << /EmbeddedFiles << /Names [{} {fs} 0 R] >> >> /AF [{fs} 0 R]", pdf_string(a.name));
+        fx = Some((a.name, a.stufe));
+    }
+    let meta = pdf.reserve();
+    let xmp = pdfa::xmp(title, author.trim(), PRODUCER, &xmp_datum, fx);
+    pdf.stream_raw(meta, "/Type /Metadata /Subtype /XML", xmp.as_bytes());
+    pdf.obj(
+        catalog,
+        &format!("<< /Type /Catalog /Pages {pages_id} 0 R /Metadata {meta} 0 R /OutputIntents [{oi} 0 R] /Lang (de-DE) /ViewerPreferences << /DisplayDocTitle true >>{extra} >>"),
+    );
+    let autor = if author.trim().is_empty() { String::new() } else { format!(" /Author {}", pdf_utf16(author.trim())) };
+    pdf.obj(
+        info,
+        &format!("<< /Title {}{autor} /Creator ({PRODUCER}) /Producer ({PRODUCER}) /CreationDate ({pdf_datum}) /ModDate ({pdf_datum}) >>", pdf_utf16(title)),
+    );
     pdf.finish(catalog, info)
 }
 
@@ -683,23 +782,50 @@ fn dokument_seiten(data: &Data, doc: &Dokument, logo: Option<&[u8]>) -> Vec<Canv
     y = table_header(&mut c, y, &cols, accent);
     let size = 9.5;
     let lh = 4.5;
-    let mut pos_nr = 0;
-    for p in &doc.positionen {
+    let nummern = positionsnummern(&doc.positionen);
+    let zws = zwischensummen(&doc.positionen);
+    // Zwischensumme einer Titelgruppe ausgeben, bevor der nächste Titel beginnt
+    let zwischensumme = |c: &mut Canvas, y: f32, titel_idx: usize| -> f32 {
+        let Some((_, summe)) = zws.iter().find(|z| z.0 == titel_idx) else { return y };
+        let Some((_, gesamt_r)) = cols.preise else { return y };
+        let titel = doc.positionen[titel_idx].text.lines().next().unwrap_or("").trim();
+        let label = format!("Zwischensumme {}", wrap(titel, 70.0, 9.0, true).into_iter().next().unwrap_or_default());
+        c.text_right(gesamt_r - 30.0, y + 4.6, 9.0, true, BLACK, &label);
+        c.text_right(gesamt_r - 1.5, y + 4.6, 9.0, true, BLACK, &fmt_num(*summe));
+        c.line(LEFT, y + 6.8, RIGHT, y + 6.8, 0.35, LINE);
+        y + 6.8
+    };
+    let mut offener_titel: Option<usize> = None;
+    for (idx, p) in doc.positionen.iter().enumerate() {
         if p.text.trim().is_empty() && p.preis == 0 {
             continue;
         }
-        pos_nr += 1;
+        if p.art == PosArt::Titel {
+            if let Some(t) = offener_titel.take() {
+                y = zwischensumme(&mut c, y, t);
+            }
+            offener_titel = Some(idx);
+        }
         let text = p.text.trim_end();
         let multi = text.contains('\n');
-        let mut lines: Vec<(String, bool)> = Vec::new();
+        let mut lines: Vec<(String, bool, bool)> = Vec::new(); // (Text, fett, grau)
+        let breite = if p.art == PosArt::Titel || p.art == PosArt::Text { RIGHT - cols.desc_x - 2.0 } else { cols.desc_w };
         for (i, raw) in text.split('\n').enumerate() {
-            let bold = multi && i == 0;
-            for l in wrap(raw, cols.desc_w, size, bold) {
-                lines.push((l, bold));
+            let bold = p.art == PosArt::Titel || (multi && i == 0 && p.art != PosArt::Text);
+            let raw = if p.art == PosArt::Optional && i == 0 { format!("Optional: {raw}") } else { raw.to_string() };
+            for l in wrap(&raw, breite, size, bold) {
+                lines.push((l, bold, p.art == PosArt::Text));
             }
         }
+        if p.mit_preis() && p.rabatt > 0.0 {
+            let r = format!("{}", (p.rabatt * 100.0).round() / 100.0).replace('.', ",");
+            lines.push((format!("abzgl. {r} % Rabatt ({})", fmt_num(p.rabatt_betrag())), false, true));
+        }
+        if p.art == PosArt::Optional {
+            lines.push(("Optionale Position – nicht in der Summe enthalten".into(), false, true));
+        }
         if lines.is_empty() {
-            lines.push((String::new(), false));
+            lines.push((String::new(), false, false));
         }
         let row_h = lines.len() as f32 * lh + 3.4;
         if y + row_h.min(40.0) > BOTTOM {
@@ -707,28 +833,37 @@ fn dokument_seiten(data: &Data, doc: &Dokument, logo: Option<&[u8]>) -> Vec<Canv
             y = table_header(&mut c, y, &cols, accent);
         }
         let ty = y + 5.0;
-        c.text(LEFT + 1.5, ty, size, false, GRAY, &pos_nr.to_string());
-        c.text_right(cols.menge_r, ty, size, false, BLACK, &fmt_qty(p.menge));
-        c.text(cols.einheit_x, ty, size, false, BLACK, &p.einheit);
-        if let Some(u) = cols.ust_r {
-            c.text_right(u, ty, size, false, BLACK, &format!("{} %", p.ust));
+        if p.art == PosArt::Titel {
+            c.rect(LEFT, y + 0.8, RIGHT - LEFT, row_h - 1.6, mix_white(accent, 0.05));
         }
-        if let Some((preis_r, gesamt_r)) = cols.preise {
-            c.text_right(preis_r, ty, size, false, BLACK, &fmt_num(p.preis));
-            c.text_right(gesamt_r - 1.5, ty, size, false, BLACK, &fmt_num(p.netto()));
+        c.text(LEFT + 1.5, ty, size, p.art == PosArt::Titel, GRAY, &nummern[idx]);
+        if p.mit_preis() {
+            c.text_right(cols.menge_r, ty, size, false, BLACK, &fmt_qty(p.menge));
+            c.text(cols.einheit_x, ty, size, false, BLACK, &p.einheit);
+            if let Some(u) = cols.ust_r {
+                c.text_right(u, ty, size, false, BLACK, &format!("{} %", p.ust));
+            }
+            if let Some((preis_r, gesamt_r)) = cols.preise {
+                c.text_right(preis_r, ty, size, false, BLACK, &fmt_num(p.preis));
+                let g = if p.art == PosArt::Optional { format!("({})", fmt_num(p.netto())) } else { fmt_num(p.netto()) };
+                c.text_right(gesamt_r - 1.5, ty, size, false, if p.art == PosArt::Optional { GRAY } else { BLACK }, &g);
+            }
         }
         let mut ly = ty;
-        for (l, bold) in &lines {
+        for (l, bold, grau) in &lines {
             if ly > BOTTOM + 2.0 {
                 y = new_page(&mut pages, &mut c);
                 y = table_header(&mut c, y, &cols, accent);
                 ly = y + 5.0;
             }
-            c.text(cols.desc_x, ly, size, *bold, BLACK, l);
+            c.text(cols.desc_x, ly, if *grau { size - 0.8 } else { size }, *bold, if *grau { GRAY } else { BLACK }, l);
             ly += lh;
         }
         y = ly - lh + 3.4;
         c.line(LEFT, y, RIGHT, y, 0.35, LINE);
+    }
+    if let Some(t) = offener_titel {
+        y = zwischensumme(&mut c, y, t);
     }
 
     // --- Summen (+ GiroCode links daneben) -----------------------------------
@@ -738,7 +873,7 @@ fn dokument_seiten(data: &Data, doc: &Dokument, logo: Option<&[u8]>) -> Vec<Canv
         } else {
             None
         };
-        let rows = 2 + sum.steuern.len();
+        let rows = 2 + sum.steuern.len() + if sum.rabatt > 0 { 2 } else { 0 };
         let block_h = (rows as f32 * 6.0 + 10.0).max(if qr.is_some() { QR_SIZE + 12.0 } else { 0.0 });
         if y + block_h > BOTTOM {
             y = new_page(&mut pages, &mut c);
@@ -746,6 +881,17 @@ fn dokument_seiten(data: &Data, doc: &Dokument, logo: Option<&[u8]>) -> Vec<Canv
         y += 6.0;
         let qr_bottom = qr.as_deref().and_then(|p| girocode_block(&mut c, LEFT, y - 3.5, p));
         let lx = 118.0;
+        if sum.rabatt > 0 {
+            summe_zeile(&mut c, lx, y, "Zwischensumme", &fmt_eur(sum.positionen));
+            y += 5.2;
+            let label = if doc.rabatt_betrag > 0 {
+                "abzgl. Rabatt".to_string()
+            } else {
+                format!("abzgl. {} % Rabatt", format!("{}", (doc.rabatt_prozent * 100.0).round() / 100.0).replace('.', ","))
+            };
+            summe_zeile(&mut c, lx, y, &label, &fmt_eur(-sum.rabatt));
+            y += 5.2;
+        }
         if !sum.steuern.is_empty() {
             summe_zeile(&mut c, lx, y, "Summe netto", &fmt_eur(sum.netto));
             y += 5.2;
@@ -770,6 +916,22 @@ fn dokument_seiten(data: &Data, doc: &Dokument, logo: Option<&[u8]>) -> Vec<Canv
         if doc.kleinunternehmer {
             c.text(lx - 2.0, y, 8.0, false, GRAY, "Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.");
             y += 6.0;
+        }
+        let skonto = doc.skonto_betrag();
+        if skonto > 0 && doc.storno_von.is_none() {
+            let pct = format!("{}", (doc.skonto_prozent * 100.0).round() / 100.0).replace('.', ",");
+            let t = format!(
+                "Bei Zahlung bis {}: {} % Skonto ({}), Zahlbetrag {}",
+                date::german(&doc.skonto_bis()),
+                pct,
+                fmt_eur(skonto),
+                fmt_eur(sum.brutto - skonto)
+            );
+            for l in wrap(&t, RIGHT - lx + 2.0, 8.0, false) {
+                c.text(lx - 2.0, y, 8.0, false, GRAY, &l);
+                y += 3.8;
+            }
+            y += 2.0;
         }
         if let Some(b) = qr_bottom {
             y = y.max(b + 5.0);
@@ -867,7 +1029,16 @@ fn unterschrift_block(pages: &mut Vec<Canvas>, c: &mut Canvas, mut y: f32, doc: 
 pub fn dokument_pdf(data: &Data, doc: &Dokument, logo: Option<&[u8]>) -> Vec<u8> {
     let logo = logo.filter(|b| image::is_png(b) || image::is_jpeg(b));
     let pages = dokument_seiten(data, doc, logo);
-    assemble(pages, logo, &format!("{} {}", doc.titel(), doc.nummer), &data.firma.name)
+    assemble(pages, logo, &format!("{} {}", doc.titel(), doc.nummer), &data.firma.name, &doc.datum, None)
+}
+
+/// Rechnung als ZUGFeRD-/Factur-X-PDF (PDF/A-3b mit eingebetteter XML-Rechnung, Profil EN 16931).
+pub fn zugferd_pdf(data: &Data, doc: &Dokument, logo: Option<&[u8]>) -> Vec<u8> {
+    let logo = logo.filter(|b| image::is_png(b) || image::is_jpeg(b));
+    let pages = dokument_seiten(data, doc, logo);
+    let xml = erechnung::cii_xml(data, doc, erechnung::Profil::Zugferd);
+    let anhang = Anhang { name: "factur-x.xml", daten: xml.as_bytes(), stufe: "EN 16931" };
+    assemble(pages, logo, &format!("{} {}", doc.titel(), doc.nummer), &data.firma.name, &doc.datum, Some(anhang))
 }
 
 // ---------------------------------------------------------------------------
@@ -970,7 +1141,7 @@ pub fn mahnung_pdf(data: &Data, doc: &Dokument, idx: usize, logo: Option<&[u8]>)
         p.text_right(RIGHT, 8.0, 9.0, true, GRAY, "KOPIE");
         pages.push(p);
     }
-    Some(assemble(pages, logo, &format!("{} zu Rechnung {}", m.label(), doc.nummer), &f.name))
+    Some(assemble(pages, logo, &format!("{} zu Rechnung {}", m.label(), doc.nummer), &f.name, &m.datum, None))
 }
 
 // ---------------------------------------------------------------------------
@@ -1100,7 +1271,7 @@ pub fn auswertung_pdf(data: &Data, a: &Auswertung, heute: &str, logo: Option<&[u
     for (i, p) in pages.iter_mut().enumerate() {
         footer(p, f, i + 1, total);
     }
-    assemble(pages, logo, &format!("Finanzübersicht {}", a.jahr), &f.name)
+    assemble(pages, logo, &format!("Finanzübersicht {}", a.jahr), &f.name, heute, None)
 }
 
 /// Kurzer Betrag für Diagramme: „12,3 Tsd.“
@@ -1146,7 +1317,8 @@ mod tests {
                 einheit: "Std.".into(),
                 preis: 6_500,
                 ust: if i % 7 == 0 { 7 } else { 19 },
-            })
+                    ..Default::default()
+                })
             .collect();
         (d, r)
     }
@@ -1156,7 +1328,7 @@ mod tests {
         let (d, r) = sample();
         let doc = d.dokument(Some(r)).unwrap();
         let bytes = dokument_pdf(&d, doc, None);
-        assert!(bytes.starts_with(b"%PDF-1.4"));
+        assert!(bytes.starts_with(b"%PDF-1.7"));
         assert!(bytes.ends_with(b"%%EOF\n"));
         let s = String::from_utf8_lossy(&bytes);
         assert!(s.contains("/Count "));
@@ -1224,6 +1396,24 @@ mod tests {
         assert!(mit.len() > ohne.len());
         let ab = d.folgedokument(r, DokArt::Auftragsbestaetigung, "2026-11-12").unwrap();
         assert!(dokument_pdf(&d, d.dokument(Some(ab)).unwrap(), None).starts_with(b"%PDF"));
+    }
+
+    #[test]
+    fn zugferd_pdfa3() {
+        let (mut d, r) = sample();
+        d.firma.email = "info@muster.de".into();
+        d.firma.telefon = "089 1".into();
+        let doc = d.dokument(Some(r)).unwrap().clone();
+        let pdf = zugferd_pdf(&d, &doc, None);
+        let s = String::from_utf8_lossy(&pdf);
+        assert!(pdf.starts_with(b"%PDF-1.7"));
+        for teil in ["/OutputIntents", "/GTS_PDFA1", "/AFRelationship /Alternative", "(factur-x.xml)", "/Subtype /text#2Fxml", "<pdfaid:part>3</pdfaid:part>", "<fx:ConformanceLevel>EN 16931</fx:ConformanceLevel>", "/FontFile2", "/ID [<"] {
+            assert!(s.contains(teil), "fehlt: {teil}");
+        }
+        assert!(!s.contains("/BaseFont /Helvetica"), "nur eingebettete Schriften");
+        // normale PDFs sind ebenfalls PDF/A (ohne Anhang)
+        let normal = String::from_utf8_lossy(&dokument_pdf(&d, &doc, None)).to_string();
+        assert!(normal.contains("/OutputIntents") && !normal.contains("factur-x.xml"));
     }
 
     #[test]

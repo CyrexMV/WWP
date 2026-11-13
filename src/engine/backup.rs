@@ -100,9 +100,9 @@ pub fn demo(heute: &str) -> Data {
     f.iban = "DE89 3704 0044 0532 0130 00".into();
     f.steuernummer = "143/123/45678".into();
     d.katalog = vec![
-        Leistung { id: 0, text: "Arbeitszeit Monteur".into(), einheit: "Std.".into(), preis: 6_500, ust: 19 },
-        Leistung { id: 0, text: "Anfahrt (Pauschale)".into(), einheit: "Pausch.".into(), preis: 3_500, ust: 19 },
-        Leistung { id: 0, text: "Wartung Heizungsanlage".into(), einheit: "Pausch.".into(), preis: 18_900, ust: 19 },
+        Leistung { id: 0, text: "Arbeitszeit Monteur".into(), einheit: "Std.".into(), preis: 6_500, ust: 19, ..Default::default() },
+        Leistung { id: 0, text: "Anfahrt (Pauschale)".into(), einheit: "Pausch.".into(), preis: 3_500, ust: 19, ..Default::default() },
+        Leistung { id: 0, text: "Wartung Heizungsanlage".into(), einheit: "Pausch.".into(), preis: 18_900, ust: 19, ..Default::default() },
     ];
     for i in 0..d.katalog.len() {
         d.katalog[i].id = d.new_id();
@@ -146,8 +146,8 @@ pub fn demo(heute: &str) -> Data {
     {
         let r = d.dokument_mut(r1).unwrap();
         r.positionen = vec![
-            Position { text: "Wartung Heizungsanlage".into(), menge: 1.0, einheit: "Pausch.".into(), preis: 18_900, ust: 19 },
-            Position { text: "Arbeitszeit Monteur".into(), menge: 1.5, einheit: "Std.".into(), preis: 6_500, ust: 19 },
+            Position { text: "Wartung Heizungsanlage".into(), menge: 1.0, einheit: "Pausch.".into(), preis: 18_900, ust: 19, ..Default::default() },
+            Position { text: "Arbeitszeit Monteur".into(), menge: 1.5, einheit: "Std.".into(), preis: 6_500, ust: 19, ..Default::default() },
         ];
         r.status = DokStatus::Versendet;
     }
@@ -158,8 +158,8 @@ pub fn demo(heute: &str) -> Data {
         let r = d.dokument_mut(r0).unwrap();
         r.betreff = "Heizungsnotdienst".into();
         r.positionen = vec![
-            Position { text: "Notdienst-Einsatz Wochenende".into(), menge: 1.0, einheit: "Pausch.".into(), preis: 45_000, ust: 19 },
-            Position { text: "Arbeitszeit Monteur".into(), menge: 4.0, einheit: "Std.".into(), preis: 6_500, ust: 19 },
+            Position { text: "Notdienst-Einsatz Wochenende".into(), menge: 1.0, einheit: "Pausch.".into(), preis: 45_000, ust: 19, ..Default::default() },
+            Position { text: "Arbeitszeit Monteur".into(), menge: 4.0, einheit: "Std.".into(), preis: 6_500, ust: 19, ..Default::default() },
         ];
         r.status = DokStatus::Versendet;
     }
@@ -169,7 +169,7 @@ pub fn demo(heute: &str) -> Data {
     {
         let r = d.dokument_mut(r2).unwrap();
         r.betreff = "Abschlag Bad-Armaturen".into();
-        r.positionen = vec![Position { text: "Abschlagszahlung Material".into(), menge: 1.0, einheit: "Pausch.".into(), preis: 40_000, ust: 19 }];
+        r.positionen = vec![Position { text: "Abschlagszahlung Material".into(), menge: 1.0, einheit: "Pausch.".into(), preis: 40_000, ust: 19, ..Default::default() }];
         r.status = DokStatus::Versendet;
     }
     // Angebot
@@ -177,8 +177,8 @@ pub fn demo(heute: &str) -> Data {
     {
         let a = d.dokument_mut(a1).unwrap();
         a.positionen = vec![
-            Position { text: "Heizungscheck je Wohnung\nSichtprüfung, Entlüften, Druck prüfen".into(), menge: 12.0, einheit: "Stk.".into(), preis: 15_000, ust: 19 },
-            Position { text: "Anfahrt (Pauschale)".into(), menge: 1.0, einheit: "Pausch.".into(), preis: 3_500, ust: 19 },
+            Position { text: "Heizungscheck je Wohnung\nSichtprüfung, Entlüften, Druck prüfen".into(), menge: 12.0, einheit: "Stk.".into(), preis: 15_000, ust: 19, ..Default::default() },
+            Position { text: "Anfahrt (Pauschale)".into(), menge: 1.0, einheit: "Pausch.".into(), preis: 3_500, ust: 19, ..Default::default() },
         ];
         a.status = DokStatus::Versendet;
     }
