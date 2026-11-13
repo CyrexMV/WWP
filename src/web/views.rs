@@ -1644,7 +1644,7 @@ impl App {
                 h,
                 "<button class=\"li\" data-act=\"kat-pick\" data-id=\"{}\"><div><b>{}</b><span>{} € je {} · {} % USt.{}</span></div>{}</button>",
                 l.id,
-                esc(if l.text.is_empty() { "Ohne Bezeichnung" } else { &l.text }),
+                esc(if l.text.trim().is_empty() { "Ohne Bezeichnung" } else { l.text.lines().next().unwrap_or("") }),
                 fmt_num(l.preis),
                 esc(&l.einheit),
                 l.ust,

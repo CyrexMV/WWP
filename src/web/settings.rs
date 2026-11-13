@@ -511,20 +511,31 @@ impl App {
     }
 
     pub(super) fn sec_katalog(&self) -> String {
-        let add = btn("kat-add", "plus", "Leistung", "primary sm", None, "");
+        let add = format!(
+            "<div>{}{}</div>",
+            btn("kat-vorlage", "download", "Vorlage Heizung", "ghost sm", None, "heizung"),
+            btn("kat-add", "plus", "Leistung", "primary sm", None, "")
+        );
         if self.data.katalog.is_empty() {
             return group_with(
                 "Leistungen &amp; Artikel",
                 "",
                 &add,
                 &format!(
-                    "<div class=\"empty small-empty\">{}<p>Häufige Leistungen hier speichern und in Angeboten und Rechnungen mit einem Tipp einfügen.</p></div>",
-                    ic("book")
+                    "<div class=\"empty small-empty\">{}<p>Häufige Leistungen hier speichern und in Angeboten und Rechnungen mit einem Tipp einfügen.</p><p class=\"muted small\">Schneller Start: rund 50 typische Leistungen für Heizungsbetriebe – Wartung, Arbeitszeit, Material, Heizkörper und Anlagen.</p>{}</div>",
+                    ic("book"),
+                    btn("kat-vorlage", "download", "Vorlage Heizungsbau laden", "primary", None, "heizung")
                 ),
             );
         }
         let mut body = String::from("<div class=\"katalog\">");
+        let mut letzte_kat = None;
         for (i, l) in self.data.katalog.iter().enumerate() {
+            let kat = l.kategorie.trim();
+            if letzte_kat != Some(kat) && !kat.is_empty() {
+                let _ = write!(body, "<div class=\"kat-head\">{}</div>", esc(kat));
+            }
+            letzte_kat = Some(kat);
             let ust: Vec<(String, String)> = [19u8, 7, 0].iter().map(|r| (r.to_string(), format!("{r} %"))).collect();
             let mut opts = String::new();
             for (v, lb) in &ust {
@@ -533,7 +544,7 @@ impl App {
             let _ = write!(
                 body,
                 "<div class=\"kat-row\">{}{}{}{}{}<label class=\"field\"><span>USt.</span><select data-f=\"l.{i}.ust\">{opts}</select></label><div class=\"marge\" id=\"marge-{i}\">{}</div><button class=\"icon-btn sm danger-text\" data-act=\"kat-del\" data-v=\"{i}\" title=\"Entfernen\">{}</button></div>",
-                text("Bezeichnung", &format!("l.{i}.text"), &l.text, "placeholder=\"z. B. Arbeitsstunde\""),
+                area("Bezeichnung", &format!("l.{i}.text"), &l.text, l.text.lines().map(|z| (z.chars().count() as u32).div_ceil(26).max(1)).sum::<u32>().clamp(1, 4), "placeholder=\"z. B. Arbeitsstunde – zweite Zeile = Beschreibung\""),
                 text("Kategorie", &format!("l.{i}.kategorie"), &l.kategorie, "list=\"kategorien\" placeholder=\"z. B. Arbeit\""),
                 text("Einheit", &format!("l.{i}.einheit"), &l.einheit, "list=\"einheiten\""),
                 money_f("EK netto", &format!("l.{i}.ek"), l.ek, "placeholder=\"0,00\""),

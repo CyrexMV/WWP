@@ -777,7 +777,7 @@ details.more .btn.block { justify-content: flex-start; min-height: 44px; }
 .befunde li.hint { color: var(--muted); }
 .befunde em { font-style: normal; opacity: .8; }
 .kat-head { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); padding: 10px 10px 2px; }
-.kat-row { grid-template-columns: minmax(150px, 2fr) minmax(110px, 1fr) 90px 120px 120px 90px 70px 38px; }
+.kat-row { grid-template-columns: minmax(150px, 2fr) minmax(100px, 1fr) 104px 116px 116px 86px 66px 38px; }
 .marge { display: flex; flex-direction: column; gap: 6px; padding-bottom: 12px; font-size: 13px; }
 .marge span { color: var(--muted); font-weight: 600; }
 
@@ -1025,3 +1025,8 @@ kbd { font: 600 11px/1 "Inter", system-ui, sans-serif; padding: 4px 6px; border-
   .todo { flex-wrap: wrap; }
   .pal-foot { display: none; }
 }
+
+/* Leistungskatalog: mehrzeilige Bezeichnung, Auswahl-Liste mit Preiszeile */
+.kat-row .field textarea { min-height: 46px; resize: vertical; }
+.li[data-act="kat-pick"] > div:first-child { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.kat-row .field.wide { grid-column: auto; }

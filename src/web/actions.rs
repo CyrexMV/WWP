@@ -852,6 +852,21 @@ impl App {
                     open_file(&bytes, "application/pdf", "Briefbogen-Vorschau.pdf");
                 }
             }
+            "kat-vorlage" => {
+                let n = crate::engine::vorlagen::HEIZUNG.len();
+                self.ask(
+                    "Vorlage Heizungsbau laden?",
+                    &format!("{n} typische Leistungen und Artikel – Arbeitszeit, Wartung, Material, Heizkörper, Fußbodenheizung, Brennwert und Wärmepumpe. Die Preise sind Richtwerte (netto): bitte an deine Kalkulation anpassen. Vorhandene Einträge bleiben erhalten, nichts wird doppelt angelegt."),
+                    "Laden",
+                    false,
+                    |a| {
+                        let neu = a.data.vorlage_laden(crate::engine::vorlagen::HEIZUNG);
+                        a.changed();
+                        a.render();
+                        a.toast(&if neu == 0 { "Alle Leistungen der Vorlage sind schon im Katalog".to_string() } else { format!("{neu} Leistungen hinzugefügt") });
+                    },
+                );
+            }
             "kat-add" => {
                 let id = self.data.new_id();
                 let ust = self.data.firma.ust_satz();

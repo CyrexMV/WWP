@@ -14,6 +14,7 @@ pub mod pdfa;
 pub mod report;
 pub mod termine;
 pub mod ttf;
+pub mod vorlagen;
 pub mod zeit;
 
 pub use model::*;

@@ -37,7 +37,8 @@ Kunden, Aufträge, Angebote, Rechnungen und Finanzen an einem Ort – **komplett
   Fußzeile mit Kontakt, Bankverbindung, Steuernummer/USt-IdNr., Falzmarken, Seitenumbruch mit Seitenzahlen
 - Einfach ausfüllen: Kunde wählen → Anschrift und Briefanrede („Sehr geehrte Frau Schön,“) werden übernommen;
   Positionen mit Menge, Einheit, Einzelpreis, USt. (19/7/0 %) – Summen rechnen live mit
-- **Leistungskatalog**: häufige Leistungen speichern und mit einem Tipp einfügen
+- **Leistungskatalog**: häufige Leistungen speichern und mit einem Tipp einfügen; **Vorlage Heizungsbau** mit rund
+  50 Leistungen (Arbeitszeit, Wartung, Material, Heizkörper/Fußbodenheizung, Brennwert, Wärmepumpe) zum Laden
 - **Per E-Mail senden**: PDF wird angehängt, Empfänger, Betreff und Text sind vorausgefüllt (Gmail, Outlook,
   Samsung E-Mail …) – oder an WhatsApp/Drive teilen; PDF ansehen oder in *Download/Zento* speichern
 - Fortlaufende Nummern je Jahr (AN-2026-0001, RE-2026-0001), Präfixe einstellbar
