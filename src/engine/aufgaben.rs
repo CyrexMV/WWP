@@ -78,10 +78,10 @@ impl Data {
                         }
                     }
                 }
-                DokArt::Auftragsbestaetigung if matches!(d.status, DokStatus::Versendet | DokStatus::Unterschrieben) => {
-                    if self.vorgang(Some(d.id), None)[3].is_none() {
-                        v.push(a(Typ::Abrechnen, Some(d.id), tage(if d.versendet_am.is_empty() { &d.datum } else { &d.versendet_am }), false));
-                    }
+                DokArt::Auftragsbestaetigung
+                    if matches!(d.status, DokStatus::Versendet | DokStatus::Unterschrieben) && self.vorgang(Some(d.id), None)[3].is_none() =>
+                {
+                    v.push(a(Typ::Abrechnen, Some(d.id), tage(if d.versendet_am.is_empty() { &d.datum } else { &d.versendet_am }), false));
                 }
                 _ => {}
             }
