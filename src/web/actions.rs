@@ -639,7 +639,7 @@ impl App {
             "termin-save" => self.termin_save(id),
             "termin-del" => {
                 let Some(id) = id else { return };
-                self.ask("Termin löschen?", "Der Termin wird aus WWP gelöscht (nicht aus der Kalender-App).", "Löschen", true, move |a| {
+                self.ask("Termin löschen?", "Der Termin wird aus Zento gelöscht (nicht aus der Kalender-App).", "Löschen", true, move |a| {
                     a.data.termine.retain(|t| t.id != id);
                     a.changed();
                     a.render();

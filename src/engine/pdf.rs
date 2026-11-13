@@ -389,7 +389,7 @@ fn embed_font(pdf: &mut Pdf, data: &[u8], name: &str, bold: bool) -> usize {
 /// Seiten zu einem PDF/A-3b zusammensetzen (eingebettete Schriften, sRGB-Farbprofil, XMP);
 /// optional mit eingebetteter XML-Rechnung (ZUGFeRD/Factur-X).
 fn assemble(pages: Vec<Canvas>, logo: Option<&[u8]>, title: &str, author: &str, datum: &str, anhang: Option<Anhang>) -> Vec<u8> {
-    const PRODUCER: &str = "WWP Buero";
+    const PRODUCER: &str = "Zento";
     let mut pdf = Pdf::new();
     let catalog = pdf.reserve();
     let pages_id = pdf.reserve();

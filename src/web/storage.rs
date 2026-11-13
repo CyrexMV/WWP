@@ -156,9 +156,9 @@ impl App {
             }
             let heute = today();
             let json = make_backup(&data, &files, &heute);
-            let name = format!("WWP-Backup-{}.wwpbackup", heute);
+            let name = format!("Zento-Backup-{}.wwpbackup", heute);
             if share {
-                share_file(json.as_bytes(), "application/json", &name, "", &name, "Backup von WWP Büro");
+                share_file(json.as_bytes(), "application/json", &name, "", &name, "Backup von Zento");
             } else {
                 save_file(json.as_bytes(), "application/json", &name);
             }
@@ -432,7 +432,7 @@ fn click_download(url: &str, name: &str) {
     });
 }
 
-/// Datei speichern: Android → „Download/WWP“, Browser → Download.
+/// Datei speichern: Android → „Download/Zento“, Browser → Download.
 pub fn save_file(bytes: &[u8], mime: &str, name: &str) {
     if let Some(r) = bridge_call("saveFile", &[name.into(), mime.into(), b64_encode(bytes).into()]) {
         if !r.as_bool().unwrap_or(false) {

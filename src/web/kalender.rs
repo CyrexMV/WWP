@@ -239,7 +239,7 @@ impl App {
             return;
         }
         let datei = ics(&self.data, &liste, &today());
-        super::storage::save_file(datei.as_bytes(), "text/calendar", "WWP-Termine.ics");
+        super::storage::save_file(datei.as_bytes(), "text/calendar", "Zento-Termine.ics");
     }
 
     pub fn kal_nav(&mut self, v: &str) {

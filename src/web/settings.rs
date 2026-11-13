@@ -583,7 +583,7 @@ impl App {
             "Ein Backup enthält alles: Daten, Logo und Belege. Am besten regelmäßig in Google Drive teilen.",
             &format!(
                 "<div class=\"action-tiles\">{}{}{}</div>{}",
-                action_tile("backup", "download", "Speichern", "In Download/WWP"),
+                action_tile("backup", "download", "Speichern", "In Download/Zento"),
                 action_tile("backup-share", "share", "Teilen", "Drive, Mail, …"),
                 action_tile("restore", "upload", "Wiederherstellen", "Aus einer Datei"),
                 if d.kunden.is_empty() && d.dokumente.is_empty() {
@@ -597,7 +597,7 @@ impl App {
             "<section class=\"group danger-zone\"><div class=\"group-head row-head\"><div><h3>Alle Daten löschen</h3><p>Kunden, Dokumente, Buchungen, Belege und Einstellungen werden unwiderruflich entfernt.</p></div>{}</div></section>",
             btn("wipe", "trash", "Löschen", "danger sm", None, "")
         );
-        let _ = write!(h, "<p class=\"version\">WWP Büro · Rust + WebAssembly · Version {}</p>", esc(&super::app_version()));
+        let _ = write!(h, "<p class=\"version\">Zento · Rust + WebAssembly · Version {}</p>", esc(&super::app_version()));
         h
     }
 

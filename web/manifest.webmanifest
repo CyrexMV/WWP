@@ -1,6 +1,6 @@
 {
-  "name": "WWP Büro",
-  "short_name": "WWP Büro",
+  "name": "Zento",
+  "short_name": "Zento",
   "description": "Kunden, Aufträge, Angebote, Rechnungen und Finanzen – geschrieben in Rust.",
   "lang": "de",
   "start_url": "./",

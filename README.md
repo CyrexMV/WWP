@@ -1,4 +1,6 @@
-# WWP Büro
+# Zento
+
+**Die Zentrale für deine Kunden und jeden Cent.**
 
 Kunden, Aufträge, Angebote, Rechnungen und Finanzen an einem Ort – **komplett in Rust geschrieben**
 (WebAssembly) und als **Android-APK** sowie installierbare Web-App verfügbar. Optimiert für das
@@ -28,7 +30,7 @@ Kunden, Aufträge, Angebote, Rechnungen und Finanzen an einem Ort – **komplett
   Positionen mit Menge, Einheit, Einzelpreis, USt. (19/7/0 %) – Summen rechnen live mit
 - **Leistungskatalog**: häufige Leistungen speichern und mit einem Tipp einfügen
 - **Per E-Mail senden**: PDF wird angehängt, Empfänger, Betreff und Text sind vorausgefüllt (Gmail, Outlook,
-  Samsung E-Mail …) – oder an WhatsApp/Drive teilen; PDF ansehen oder in *Download/WWP* speichern
+  Samsung E-Mail …) – oder an WhatsApp/Drive teilen; PDF ansehen oder in *Download/Zento* speichern
 - Fortlaufende Nummern je Jahr (AN-2026-0001, RE-2026-0001), Präfixe einstellbar
 - **Ablauf auf einen Blick**: Angebot → Auftragsbestätigung → Rechnung. Im Dokument und im Auftrag zeigt eine
   Schrittleiste, was schon da ist und was als Nächstes kommt; „Erstellen“ übernimmt Kunde, Anschrift und

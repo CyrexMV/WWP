@@ -1,4 +1,4 @@
-name: WWP Büro bauen (Web + APK) & veröffentlichen
+name: Zento bauen (Web + APK) & veröffentlichen
 
 # 1. Testet und baut die Rust/WebAssembly-App
 # 2. Packt sie in eine Android-APK (android/)

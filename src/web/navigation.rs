@@ -115,7 +115,7 @@ impl App {
                 esc(kurz)
             )
         };
-        let firm = if self.data.firma.name.trim().is_empty() { "WWP Büro".to_string() } else { self.data.firma.name.trim().to_string() };
+        let firm = if self.data.firma.name.trim().is_empty() { "Zento".to_string() } else { self.data.firma.name.trim().to_string() };
         let logo = match &self.logo_url {
             Some(u) => format!("<img class=\"brand-logo\" src=\"{}\" alt=\"\">", esc(u)),
             None => format!("<div class=\"brand-mark\">{}</div>", ic("logo")),

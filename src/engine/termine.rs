@@ -98,7 +98,7 @@ fn fold(line: &str) -> String {
 
 /// Termine als iCalendar-Datei (lokale Zeit).
 pub fn ics(data: &Data, termine: &[&Termin], stempel: &str) -> String {
-    let mut s = String::from("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//WWP Buero//DE\r\nCALSCALE:GREGORIAN\r\n");
+    let mut s = String::from("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Zento//DE\r\nCALSCALE:GREGORIAN\r\n");
     for t in termine {
         s += "BEGIN:VEVENT\r\n";
         s += &fold(&format!("UID:wwp-termin-{}@wwp-buero", t.id));

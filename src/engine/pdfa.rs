@@ -170,7 +170,7 @@ mod tests {
 
     #[test]
     fn xmp_wohlgeformt() {
-        let x = xmp("Rechnung RE-1 & Co", "Müller <GmbH>", "WWP Buero", "2026-11-13T00:00:00+00:00", Some(("factur-x.xml", "EN 16931")));
+        let x = xmp("Rechnung RE-1 & Co", "Müller <GmbH>", "Zento", "2026-11-13T00:00:00+00:00", Some(("factur-x.xml", "EN 16931")));
         assert!(x.contains("<pdfaid:part>3</pdfaid:part>"));
         assert!(x.contains("RE-1 &amp; Co"));
         assert!(x.contains("Müller &lt;GmbH&gt;"));

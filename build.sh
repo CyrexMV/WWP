@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Baut WWP Büro: Rust → WebAssembly → web/pkg
+# Baut Zento: Rust → WebAssembly → web/pkg
 # Voraussetzungen: rustup target add wasm32-unknown-unknown
 #                  cargo install wasm-bindgen-cli --version 0.2.130
 set -euo pipefail

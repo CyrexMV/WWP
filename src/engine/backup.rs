@@ -73,7 +73,7 @@ pub type Restored = (Data, Vec<(Id, Vec<u8>)>, String);
 pub fn parse_backup(s: &str) -> Result<Restored, String> {
     let b: Backup = serde_json::from_str(s.trim_start_matches('\u{feff}')).map_err(|_| "Keine gültige Backup-Datei".to_string())?;
     if b.format != "wwp-backup" {
-        return Err("Keine WWP-Backup-Datei".into());
+        return Err("Keine Zento-Backup-Datei".into());
     }
     let data = Data::from_json(&serde_json::to_string(&b.data).map_err(|e| e.to_string())?)?;
     let mut files = Vec::new();

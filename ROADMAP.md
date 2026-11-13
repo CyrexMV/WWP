@@ -1,4 +1,4 @@
-# Roadmap – WWP Büro
+# Roadmap – Zento
 
 Geplante Erweiterungen. Jede Funktion hat ein eigenes Issue mit Beschreibung und Umfang;
 der Stand wird im GitHub-Project-Board verfolgt.

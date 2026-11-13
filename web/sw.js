@@ -1,4 +1,4 @@
-// Service Worker: macht WWP Büro als installierte Web-App offline nutzbar.
+// Service Worker: macht Zento als installierte Web-App offline nutzbar.
 const VERSION = 'dev';
 const CACHE = 'wwp-' + VERSION;
 const FILES = [

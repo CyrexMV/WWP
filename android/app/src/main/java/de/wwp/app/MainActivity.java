@@ -37,13 +37,13 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Android-Hülle für WWP Büro.
+ * Android-Hülle für Zento.
  *
  * Die komplette App (Rust/WebAssembly + Oberfläche) liegt in der APK unter assets/www und wird
  * über eine virtuelle HTTPS-Adresse geladen – es wird kein Internet benötigt. Die Daten liegen
  * in der IndexedDB der WebView (nur auf dem Gerät).
  *
- * Brücke `WWPAndroid` für die Rust-App: Dateien speichern (Download/WWP), öffnen (PDF-Betrachter)
+ * Brücke `WWPAndroid` für die Rust-App: Dateien speichern (Download/Zento), öffnen (PDF-Betrachter)
  * und teilen bzw. per E-Mail versenden (mit vorausgefülltem Empfänger, Betreff und Text).
  */
 public class MainActivity extends Activity {
@@ -349,7 +349,7 @@ public class MainActivity extends Activity {
     }
 
     public class Bridge {
-        /** Speichert eine Datei: Bilder in „Bilder/WWP“, alles andere in „Download/WWP“. */
+        /** Speichert eine Datei: Bilder in „Bilder/Zento“, alles andere in „Download/Zento“. */
         @JavascriptInterface
         public boolean saveFile(String name, String mime, String base64) {
             try {
@@ -359,7 +359,7 @@ public class MainActivity extends Activity {
                 v.put(MediaStore.MediaColumns.DISPLAY_NAME, safeName(name));
                 v.put(MediaStore.MediaColumns.MIME_TYPE, mime);
                 v.put(MediaStore.MediaColumns.RELATIVE_PATH,
-                        (image ? Environment.DIRECTORY_PICTURES : Environment.DIRECTORY_DOWNLOADS) + "/WWP");
+                        (image ? Environment.DIRECTORY_PICTURES : Environment.DIRECTORY_DOWNLOADS) + "/Zento");
                 v.put(MediaStore.MediaColumns.IS_PENDING, 1);
                 Uri collection = image
                         ? MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
@@ -378,7 +378,7 @@ public class MainActivity extends Activity {
                 v.clear();
                 v.put(MediaStore.MediaColumns.IS_PENDING, 0);
                 cr.update(uri, v, null, null);
-                final String where = image ? "Bilder/WWP" : "Download/WWP";
+                final String where = image ? "Bilder/Zento" : "Download/Zento";
                 runOnUiThread(() -> Toast.makeText(MainActivity.this, "Gespeichert in " + where, Toast.LENGTH_SHORT).show());
                 return true;
             } catch (Exception e) {
