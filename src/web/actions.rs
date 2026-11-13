@@ -131,6 +131,9 @@ impl App {
     // -----------------------------------------------------------------------
 
     pub fn action(&mut self, act: &str, id: Option<Id>, v: &str) {
+        if self.settings_action(act, v) {
+            return;
+        }
         let heute = today();
         let idx = v.parse::<usize>().ok();
         match act {
@@ -881,10 +884,7 @@ impl App {
                     "email" => f.email = s,
                     "web" => f.web = s,
                     "bank" => f.bank = s,
-                    "iban" => {
-                        f.iban = s.to_uppercase();
-                        set_html("iban-hint", &super::views::iban_hint(&f.iban));
-                    }
+                    "iban" => f.iban = s.to_uppercase(),
                     "bic" => f.bic = s.to_uppercase(),
                     "steuernummer" => f.steuernummer = s,
                     "ust_id" => f.ust_id = s,
@@ -950,6 +950,7 @@ impl App {
                 if nav {
                     set_html("nav", &self.nav_html());
                 }
+                self.settings_refresh();
             }
             ("l", View::Einstellungen) => {
                 let mut it = rest.splitn(2, '.');

@@ -1,6 +1,6 @@
 //! HTML-Erzeugung für alle Ansichten.
 
-use super::{esc, set_html, theme, today, App, View};
+use super::{esc, set_html, today, App, View};
 use crate::engine::date::{self, german, MONTHS, MONTHS_SHORT};
 use crate::engine::model::*;
 use crate::engine::money::{fmt_eur, fmt_num, fmt_qty, Cents};
@@ -24,7 +24,7 @@ fn dis(d: bool) -> &'static str {
     }
 }
 
-fn text(label: &str, key: &str, value: &str, extra: &str) -> String {
+pub(super) fn text(label: &str, key: &str, value: &str, extra: &str) -> String {
     format!(
         "<label class=\"field\"><span>{}</span><input type=\"text\" data-f=\"{}\" value=\"{}\" {}></label>",
         esc(label),
@@ -34,7 +34,7 @@ fn text(label: &str, key: &str, value: &str, extra: &str) -> String {
     )
 }
 
-fn area(label: &str, key: &str, value: &str, rows: u32, extra: &str) -> String {
+pub(super) fn area(label: &str, key: &str, value: &str, rows: u32, extra: &str) -> String {
     format!(
         "<label class=\"field wide\"><span>{}</span><textarea data-f=\"{}\" rows=\"{}\" {}>{}</textarea></label>",
         esc(label),
@@ -55,7 +55,7 @@ fn date_f(label: &str, key: &str, value: &str, extra: &str) -> String {
     )
 }
 
-fn money_f(label: &str, key: &str, c: Cents, extra: &str) -> String {
+pub(super) fn money_f(label: &str, key: &str, c: Cents, extra: &str) -> String {
     format!(
         "<label class=\"field\"><span>{}</span><div class=\"euro\"><input type=\"text\" inputmode=\"decimal\" data-f=\"{}\" value=\"{}\" {}><i>€</i></div></label>",
         esc(label),
@@ -65,7 +65,7 @@ fn money_f(label: &str, key: &str, c: Cents, extra: &str) -> String {
     )
 }
 
-fn select_f(label: &str, key: &str, opts: &[(String, String)], sel: &str, extra: &str) -> String {
+pub(super) fn select_f(label: &str, key: &str, opts: &[(String, String)], sel: &str, extra: &str) -> String {
     let mut o = String::new();
     for (v, l) in opts {
         let _ = write!(o, "<option value=\"{}\"{}>{}</option>", esc(v), if v == sel { " selected" } else { "" }, esc(l));
@@ -73,7 +73,7 @@ fn select_f(label: &str, key: &str, opts: &[(String, String)], sel: &str, extra:
     format!("<label class=\"field\"><span>{}</span><select data-f=\"{}\" {}>{}</select></label>", esc(label), key, extra, o)
 }
 
-fn ust_opts() -> Vec<(String, String)> {
+pub(super) fn ust_opts() -> Vec<(String, String)> {
     [19u8, 7, 0].iter().map(|r| (r.to_string(), format!("{r} %"))).collect()
 }
 
@@ -81,18 +81,18 @@ pub fn badge(key: &str, label: &str) -> String {
     format!("<span class=\"badge st-{key}\">{}</span>", esc(label))
 }
 
-fn btn(act: &str, icon: &str, label: &str, cls: &str, id: Option<Id>, v: &str) -> String {
+pub(super) fn btn(act: &str, icon: &str, label: &str, cls: &str, id: Option<Id>, v: &str) -> String {
     let id = id.map(|i| format!(" data-id=\"{i}\"")).unwrap_or_default();
     let v = if v.is_empty() { String::new() } else { format!(" data-v=\"{}\"", esc(v)) };
     let icon = if icon.is_empty() { String::new() } else { ic(icon) };
     format!("<button class=\"btn {cls}\" data-act=\"{act}\"{id}{v}>{icon}<span>{}</span></button>", esc(label))
 }
 
-fn empty(icon: &str, title: &str, text: &str, action: &str) -> String {
+pub(super) fn empty(icon: &str, title: &str, text: &str, action: &str) -> String {
     format!("<div class=\"empty\">{}<h3>{}</h3><p>{}</p>{}</div>", ic(icon), esc(title), esc(text), action)
 }
 
-fn head(title: &str, sub: &str, actions: &str, back: bool) -> String {
+pub(super) fn head(title: &str, sub: &str, actions: &str, back: bool) -> String {
     let b = if back { format!("<button class=\"icon-btn\" data-act=\"back\" title=\"Zurück\">{}</button>", ic("back")) } else { String::new() };
     let sub = if sub.is_empty() { String::new() } else { format!("<p class=\"sub\">{sub}</p>") };
     format!("<header class=\"page-head\">{b}<div class=\"ph-title\"><h1>{}</h1>{sub}</div><div class=\"ph-actions\">{actions}</div></header>", esc(title))
@@ -1212,166 +1212,6 @@ impl App {
             );
         }
         h += "</aside></div>";
-        h
-    }
-
-    // -----------------------------------------------------------------------
-    // Einstellungen
-    // -----------------------------------------------------------------------
-
-    fn settings_html(&self) -> String {
-        let f = &self.data.firma;
-        let mut h = String::new();
-        h += &head("Einstellungen", "Firmendaten, Briefbogen, Texte und Daten", &btn("preview", "eye", "Briefbogen-Vorschau", "ghost", None, ""), false);
-        h += "<div class=\"settings\">";
-
-        h += "<div class=\"card\"><div class=\"card-head\"><h2>Firma</h2></div><div class=\"form\">";
-        h += &text("Firmenname", "f.name", &f.name, "placeholder=\"Muster GmbH\"");
-        h += &text("Zusatz", "f.zusatz", &f.zusatz, "placeholder=\"Inh. Max Muster\"");
-        h += &text("Straße & Hausnr.", "f.strasse", &f.strasse, "");
-        h += &text("PLZ & Ort", "f.plz_ort", &f.plz_ort, "");
-        h += &text("Telefon", "f.telefon", &f.telefon, "inputmode=\"tel\"");
-        h += &text("E-Mail", "f.email", &f.email, "inputmode=\"email\"");
-        h += &text("Webseite", "f.web", &f.web, "");
-        h += "</div></div>";
-
-        h += "<div class=\"card\"><div class=\"card-head\"><h2>Bank &amp; Steuer</h2></div><div class=\"form\">";
-        h += &text("Bank", "f.bank", &f.bank, "");
-        h += &text("IBAN", "f.iban", &f.iban, "autocapitalize=\"characters\"");
-        h += &text("BIC", "f.bic", &f.bic, "autocapitalize=\"characters\"");
-        let _ = write!(h, "<p class=\"hint wide\" id=\"iban-hint\">{}</p>", iban_hint(&f.iban));
-        h += &text("Steuernummer", "f.steuernummer", &f.steuernummer, "");
-        h += &text("USt-IdNr.", "f.ust_id", &f.ust_id, "");
-        let _ = write!(
-            h,
-            "<label class=\"switch wide\"><input type=\"checkbox\" data-f=\"f.kleinunternehmer\"{}><span>Kleinunternehmer (§ 19 UStG) – keine Umsatzsteuer auf Rechnungen</span></label>",
-            if f.kleinunternehmer { " checked" } else { "" }
-        );
-        if !f.kleinunternehmer {
-            h += &select_f("Standard-Steuersatz", "f.ust_standard", &ust_opts(), &f.ust_standard.to_string(), "");
-        }
-        let _ = write!(
-            h,
-            "<label class=\"switch wide\"><input type=\"checkbox\" data-f=\"f.girocode\"{}><span>GiroCode (QR-Code zum Bezahlen) auf Rechnungen und Mahnungen</span></label>",
-            if f.girocode { " checked" } else { "" }
-        );
-        h += "</div></div>";
-
-        // Briefbogen
-        h += "<div class=\"card\"><div class=\"card-head\"><h2>Logo &amp; Briefbogen</h2></div><div class=\"logo-row\">";
-        match &self.logo_url {
-            Some(u) => {
-                let _ = write!(h, "<div class=\"logo-prev\"><img src=\"{}\" alt=\"Logo\"></div>", esc(u));
-            }
-            None => h += "<div class=\"logo-prev empty-logo\">Kein Logo</div>",
-        }
-        let _ = write!(
-            h,
-            "<div class=\"actions\">{}{}</div></div><div class=\"form\">",
-            btn("logo-add", "image", if self.logo.is_some() { "Logo ersetzen" } else { "Logo hochladen (PNG/JPG)" }, "primary", None, ""),
-            if self.logo.is_some() { btn("logo-del", "trash", "Entfernen", "ghost danger-text", None, "") } else { String::new() }
-        );
-        let breiten: Vec<(String, String)> = [30, 40, 45, 55, 65, 80].iter().map(|w| (w.to_string(), format!("{w} mm"))).collect();
-        h += &select_f("Logobreite", "f.logo_breite_mm", &breiten, &(f.logo_breite_mm.round() as i32).to_string(), "");
-        let _ = write!(
-            h,
-            "<label class=\"field\"><span>Akzentfarbe</span><input type=\"color\" data-f=\"f.farbe\" value=\"{}\"></label>",
-            esc(&f.farbe)
-        );
-        h += &text("Präfix Angebote", "f.prefix_angebot", &f.prefix_angebot, "");
-        h += &text("Präfix Rechnungen", "f.prefix_rechnung", &f.prefix_rechnung, "");
-        h += &text("Zahlungsziel (Tage)", "f.zahlungsziel", &f.zahlungsziel.to_string(), "inputmode=\"numeric\"");
-        h += &text("Angebot gültig (Tage)", "f.angebot_gueltig", &f.angebot_gueltig.to_string(), "inputmode=\"numeric\"");
-        h += "<p class=\"hint wide\">Nummern laufen je Jahr fortlaufend, z. B. RE-2026-0001.</p>";
-        h += "</div></div>";
-
-        // Mahnwesen
-        h += "<div class=\"card wide-card\"><div class=\"card-head\"><h2>Mahnwesen</h2></div><div class=\"form\">";
-        for (i, name) in MAHNSTUFEN.iter().enumerate() {
-            let (tage, gebuehr, text_) = f.mahnstufe(i as u8);
-            let _ = write!(h, "<h3 class=\"wide sub-h\">{name}</h3>");
-            h += &text("Neue Frist (Tage)", &format!("f.mahn_tage.{i}"), &tage.to_string(), "inputmode=\"numeric\"");
-            h += &money_f("Mahngebühr", &format!("f.mahn_gebuehr.{i}"), gebuehr, "placeholder=\"0,00\"");
-            h += &area("Text", &format!("f.mahn_text.{i}"), &text_, 3, "");
-        }
-        let _ = write!(
-            h,
-            "<label class=\"switch wide\"><input type=\"checkbox\" data-f=\"f.verzugszinsen\"{}><span>Verzugszinsen standardmäßig berechnen (Basiszinssatz + 5 Prozentpunkte für Privatkunden, + 9 für Geschäftskunden)</span></label>",
-            if f.verzugszinsen { " checked" } else { "" }
-        );
-        h += &text("Basiszinssatz (%)", "f.basiszins", &format!("{}", f.basiszins).replace('.', ","), "inputmode=\"decimal\"");
-        h += "<p class=\"hint\">Aktueller Wert: Deutsche Bundesbank, „Basiszinssatz“ – ändert sich zum 1. Januar und 1. Juli.</p>";
-        h += &text("E-Mail-Betreff Mahnung", "f.mail_betreff_mahnung", &f.mail_betreff_mahnung, "");
-        h += &area("E-Mail-Text Mahnung", "f.mail_text_mahnung", &f.mail_text_mahnung, 5, "");
-        h += "<p class=\"hint wide\">Platzhalter: {stufe} {nummer} {datum} {betrag} {faellig} {gesamt} {gebuehr} {frist} {firma} {ansprechpartner}. Die Briefanrede wird automatisch vorangestellt; die Rechnung wird als Kopie angehängt.</p>";
-        h += "</div></div>";
-
-        // Texte
-        h += "<div class=\"card wide-card\"><div class=\"card-head\"><h2>Standardtexte</h2></div><div class=\"form\">";
-        h += &area("Angebot – Einleitung", "f.einleitung_angebot", &f.einleitung_angebot, 2, "");
-        h += &area("Angebot – Schluss", "f.schluss_angebot", &f.schluss_angebot, 2, "");
-        h += &area("Rechnung – Einleitung", "f.einleitung_rechnung", &f.einleitung_rechnung, 2, "");
-        h += &area("Rechnung – Schluss", "f.schluss_rechnung", &f.schluss_rechnung, 2, "");
-        h += &text("E-Mail-Betreff Angebot", "f.mail_betreff_angebot", &f.mail_betreff_angebot, "");
-        h += &text("E-Mail-Betreff Rechnung", "f.mail_betreff_rechnung", &f.mail_betreff_rechnung, "");
-        h += &area("E-Mail-Text Angebot", "f.mail_text_angebot", &f.mail_text_angebot, 5, "");
-        h += &area("E-Mail-Text Rechnung", "f.mail_text_rechnung", &f.mail_text_rechnung, 5, "");
-        h += "<p class=\"hint wide\">Platzhalter: {nummer} {betrag} {faellig} {gueltig} {datum} {zahlungsziel} {firma} {kunde} {ansprechpartner}. Die Briefanrede (z. B. „Sehr geehrte Frau Muster,“) wird automatisch vorangestellt.</p>";
-        h += "</div></div>";
-
-        // Katalog
-        h += "<div class=\"card wide-card\"><div class=\"card-head\"><h2>Leistungskatalog</h2>";
-        h += &btn("kat-add", "plus", "Leistung", "ghost sm", None, "");
-        h += "</div>";
-        if self.data.katalog.is_empty() {
-            h += "<p class=\"muted pad\">Häufige Leistungen und Artikel hier speichern und in Angeboten/Rechnungen mit einem Tipp einfügen.</p>";
-        } else {
-            h += "<div class=\"katalog\">";
-            for (i, l) in self.data.katalog.iter().enumerate() {
-                let _ = write!(
-                    h,
-                    "<div class=\"kat-row\">{}{}{}{}<button class=\"icon-btn sm danger-text\" data-act=\"kat-del\" data-v=\"{i}\" title=\"Entfernen\">{}</button></div>",
-                    text("Bezeichnung", &format!("l.{i}.text"), &l.text, ""),
-                    text("Einheit", &format!("l.{i}.einheit"), &l.einheit, "list=\"einheiten\""),
-                    money_f("Preis netto", &format!("l.{i}.preis"), l.preis, "placeholder=\"0,00\""),
-                    select_f("USt.", &format!("l.{i}.ust"), &ust_opts(), &l.ust.to_string(), ""),
-                    ic("trash")
-                );
-            }
-            h += "<datalist id=\"einheiten\">";
-            for e in EINHEITEN {
-                let _ = write!(h, "<option value=\"{e}\">");
-            }
-            h += "</datalist></div>";
-        }
-        h += "</div>";
-
-        // Darstellung
-        let t = theme();
-        h += "<div class=\"card\"><div class=\"card-head\"><h2>Darstellung</h2></div><div class=\"chips pad\">";
-        for (k, l) in [("auto", "Automatisch"), ("light", "Hell"), ("dark", "Dunkel")] {
-            let _ = write!(h, "<button class=\"chip{}\" data-act=\"theme\" data-v=\"{k}\">{l}</button>", if t == k { " active" } else { "" });
-        }
-        h += "</div></div>";
-
-        // Daten
-        let d = &self.data;
-        let _ = write!(
-            h,
-            "<div class=\"card\"><div class=\"card-head\"><h2>Daten &amp; Backup</h2></div><p class=\"muted pad\">{} Kunden · {} Aufträge · {} Dokumente · {} Buchungen · {} Dateien. Alle Daten liegen nur auf diesem Gerät – erstelle regelmäßig ein Backup (z. B. in Google Drive teilen).</p><div class=\"actions pad\">{}{}{}{}{}</div><p class=\"muted small pad\">WWP Büro · Rust + WebAssembly · Version <span id=\"app-version\">{}</span></p></div>",
-            d.kunden.len(),
-            d.auftraege.len(),
-            d.dokumente.len(),
-            d.buchungen.len(),
-            d.dateien.len(),
-            btn("backup", "download", "Backup speichern", "primary", None, ""),
-            btn("backup-share", "share", "Backup teilen", "ghost", None, ""),
-            btn("restore", "upload", "Backup wiederherstellen", "ghost", None, ""),
-            if d.kunden.is_empty() && d.dokumente.is_empty() { btn("demo", "", "Beispieldaten laden", "ghost", None, "") } else { String::new() },
-            btn("wipe", "trash", "Alle Daten löschen", "ghost danger-text", None, ""),
-            esc(&super::app_version())
-        );
-        h += "</div>";
         h
     }
 

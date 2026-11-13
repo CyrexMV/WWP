@@ -6,6 +6,7 @@
 //! * Suchfelder mit `data-search` → nur die Liste wird neu gezeichnet (Fokus bleibt erhalten)
 
 mod actions;
+mod settings;
 mod storage;
 mod views;
 
@@ -60,6 +61,8 @@ pub struct Ui {
     pub abgelehnte: bool,
     /// Festgeschriebene Dokumente, die trotzdem bearbeitet werden dürfen
     pub entsperrt: HashSet<Id>,
+    /// geöffneter Bereich der Einstellungen
+    pub settings_tab: String,
 }
 
 /// Aktion, die nach „Ja“ in einer Sicherheitsabfrage ausgeführt wird.
