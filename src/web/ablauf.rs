@@ -1,4 +1,4 @@
-//! Ablauf eines Vorgangs: Angebot → Auftragsbestätigung → Rechnung.
+//! Ablauf eines Vorgangs: Auftragsbestätigung → Rechnung.
 //! Zeigt, was es schon gibt, was übersprungen wurde und was als Nächstes kommt –
 //! im Dokument-Editor und im Auftrag. Folgedokumente übernehmen Kunde und Positionen.
 
@@ -8,14 +8,14 @@ use crate::engine::date::german;
 use crate::engine::model::{DokArt, DokStatus, Id};
 use std::fmt::Write as _;
 
-/// Die Schritte des Ablaufs (Lieferscheine werden nicht genutzt).
-pub const SCHRITTE: [DokArt; 3] = [DokArt::Angebot, DokArt::Auftragsbestaetigung, DokArt::Rechnung];
+/// Die Schritte des Ablaufs (Angebote und Lieferscheine werden nicht mehr angeboten).
+pub const SCHRITTE: [DokArt; 2] = [DokArt::Auftragsbestaetigung, DokArt::Rechnung];
 
 /// (Kurzname, Erklärung)
 fn schritt_info(art: DokArt) -> (&'static str, &'static str) {
     match art {
         DokArt::Angebot => ("Angebot", "Preisvorschlag an den Kunden"),
-        DokArt::Auftragsbestaetigung => ("Auftrags\u{ad}bestätigung", "Zusage des Kunden schriftlich bestätigen"),
+        DokArt::Auftragsbestaetigung => ("Auftrags\u{ad}bestätigung", "Auftrag schriftlich bestätigen – Kunde kann direkt unterschreiben"),
         DokArt::Lieferschein => ("Lieferschein", ""),
         DokArt::Rechnung => ("Rechnung", "Geld anfordern – Zahlung wird in Finanzen gebucht"),
     }
@@ -34,7 +34,8 @@ impl App {
         let schritte: Vec<Option<Id>> = SCHRITTE.iter().map(|a| alle[index(*a)]).collect();
         let letzter = schritte.iter().rposition(|s| s.is_some());
         // Quelle für neue Folgedokumente: das späteste vorhandene Dokument
-        let quelle = letzter.and_then(|i| schritte[i]);
+        // (bei älteren Angeboten: das Angebot selbst)
+        let quelle = letzter.and_then(|i| schritte[i]).or(aktuell);
         // empfohlener nächster Schritt
         let naechster = letzter.map_or(0, |l| l + 1);
         let mut h = String::from("<div class=\"card ablauf\"><div class=\"card-head\"><h2>Ablauf</h2></div><ol class=\"steps\">");
@@ -89,14 +90,8 @@ impl App {
         }
         h += "</ol>";
         let tipp = match letzter.map(|i| (SCHRITTE[i], schritte[i].and_then(|id| d.dokument(Some(id))))) {
-            None => "Starte mit einem Angebot.".to_string(),
-            Some((DokArt::Angebot, Some(x))) => match x.status {
-                DokStatus::Angenommen => "Der Kunde hat zugesagt – jetzt die Auftragsbestätigung erstellen.".into(),
-                DokStatus::Abgelehnt => "Das Angebot wurde abgelehnt.".into(),
-                DokStatus::Entwurf => "Angebot fertig ausfüllen und per E-Mail senden – oder vor Ort auf dem Tablet unterschreiben lassen.".into(),
-                _ => "Warte auf die Zusage des Kunden. Sagt er zu: „Ja, angenommen“ tippen oder unterschreiben lassen.".into(),
-            },
-            Some((DokArt::Auftragsbestaetigung, Some(x))) if x.status == DokStatus::Entwurf => "Auftragsbestätigung prüfen und an den Kunden senden. Nach der Arbeit die Rechnung erstellen.".into(),
+            None => "Erst die Auftragsbestätigung – oder direkt die Rechnung.".to_string(),
+            Some((DokArt::Auftragsbestaetigung, Some(x))) if x.status == DokStatus::Entwurf => "Bestätigung senden oder vor Ort unterschreiben lassen. Nach der Arbeit die Rechnung erstellen.".into(),
             Some((DokArt::Auftragsbestaetigung, _)) => "Auftrag ist bestätigt. Nach der Arbeit die Rechnung erstellen.".into(),
             Some((DokArt::Rechnung, Some(x))) if x.status == DokStatus::Bezahlt => format!("{} Vorgang abgeschlossen – die Rechnung ist bezahlt.", ic("check")),
             Some((DokArt::Rechnung, Some(x))) if x.status == DokStatus::Entwurf => "Rechnung prüfen und per E-Mail senden.".into(),
@@ -128,7 +123,7 @@ impl App {
                 esc(erkl)
             );
         }
-        h += "</ol><p class=\"hint\">Du legst nur das <b>Angebot</b> selbst an. Bestätigung und Rechnung erstellst du im Dokument unter <b>Ablauf → Erstellen</b> – Kunde und Positionen werden übernommen.</p></div>";
+        h += "</ol><p class=\"hint\">Beim <b>Kunden</b> auf <b>+ Bestätigung</b> tippen. Nach der Arbeit in der Bestätigung unter <b>Ablauf → Rechnung erstellen</b> – Kunde und Positionen werden übernommen. Kleine Aufträge gehen auch direkt mit <b>+ Rechnung</b>.</p></div>";
         h
     }
 }

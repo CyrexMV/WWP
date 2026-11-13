@@ -10,12 +10,8 @@ use std::fmt::Write as _;
 pub const NAV: &[(&str, &str, &str)] = &[
     ("start", "home", "Übersicht"),
     ("kunden", "users", "Kunden"),
-    ("auftraege", "briefcase", "Aufträge"),
-    ("kalender", "calendar", "Kalender"),
-    ("angebote", "file", "Angebote"),
-    ("ab", "check", "Auftragsbestätigungen"),
     ("rechnungen", "receipt", "Rechnungen"),
-    ("mahnungen", "bell", "Mahnwesen"),
+    ("kalender", "calendar", "Kalender"),
     ("finanzen", "wallet", "Finanzen"),
     ("katalog", "book", "Leistungskatalog"),
 ];
@@ -37,13 +33,9 @@ pub fn ziel(key: &str) -> View {
     }
 }
 
-fn art_key(art: DokArt) -> &'static str {
-    match art {
-        DokArt::Angebot => "angebote",
-        DokArt::Auftragsbestaetigung => "ab",
-        DokArt::Lieferschein => "ab",
-        DokArt::Rechnung => "rechnungen",
-    }
+/// Bestätigungen, Rechnungen und Mahnwesen liegen unter „Rechnungen“ (als Reiter).
+fn art_key(_art: DokArt) -> &'static str {
+    "rechnungen"
 }
 
 impl App {
@@ -76,11 +68,11 @@ impl App {
         }
         match self.stack.iter().rev().find(|v| !matches!(v, View::Start)).copied().unwrap_or(View::Start) {
             View::Kunden(_) => "kunden",
-            View::Auftraege | View::Auftrag(_) => "auftraege",
+            View::Auftraege | View::Auftrag(_) => "kunden",
             View::Kalender => "kalender",
             View::Dokumente(art) => art_key(art),
             View::Dokument(id) => self.data.dokument(Some(id)).map(|d| art_key(d.art)).unwrap_or("rechnungen"),
-            View::Mahnwesen => "mahnungen",
+            View::Mahnwesen => "rechnungen",
             View::Finanzen | View::Buchung(_) => "finanzen",
             View::Katalog => "katalog",
             View::Einstellungen => "einstellungen",
@@ -96,7 +88,6 @@ impl App {
             "auftraege" => (d.auftraege.iter().filter(|a| a.status == AuftragStatus::Anfrage).count(), false),
             "kalender" => (d.termine_am(&heute).len(), false),
             "rechnungen" => (d.dokumente.iter().filter(|x| x.ueberfaellig(&heute)).count(), true),
-            "mahnungen" => (d.dokumente.iter().filter(|x| x.offen() && x.zu_mahnen(&heute)).count(), true),
             _ => (0, false),
         }
     }
@@ -105,8 +96,7 @@ impl App {
         let cur = self.nav_aktiv();
         let item = |key: &str, icon: &str, label: &str, (count, alert): (usize, bool)| {
             let b = if count > 0 { format!("<em class=\"{}\">{}</em>", if alert { "alert" } else { "" }, count) } else { String::new() };
-            // kurze Bezeichnung in der Leiste, voller Name als Hinweis
-            let kurz = if key == "ab" { "Bestätigungen" } else { label };
+            let kurz = label;
             format!(
                 "<button class=\"nav-item{}\" data-act=\"nav\" data-v=\"{key}\" title=\"{}\">{}<span>{}</span>{b}</button>",
                 if cur == key { " active" } else { "" },
@@ -131,7 +121,7 @@ impl App {
             }
             let n = NAV.iter().find(|n| n.0 == key).unwrap();
             let mut it = item(n.0, n.1, n.2, self.nav_zahl(key));
-            if key == "auftraege" && self.data.laufende_uhr().is_some() {
+            if key == "kunden" && self.data.laufende_uhr().is_some() {
                 it = it.replacen("</span>", "</span><i class=\"live\" title=\"Stoppuhr läuft\"></i>", 1);
             }
             h += &it;

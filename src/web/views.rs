@@ -180,15 +180,11 @@ impl App {
         let ueber: Vec<&&Dokument> = offen.iter().filter(|x| x.ueberfaellig(&heute)).collect();
         let ueber_sum: Cents = ueber.iter().map(|x| x.rest()).sum();
         let zu_mahnen = offen.iter().filter(|x| x.zu_mahnen(&heute)).count();
-        let angebote: Vec<&Dokument> = d.dokumente.iter().filter(|x| x.art == DokArt::Angebot && x.status == DokStatus::Versendet).collect();
-        let angebote_sum: Cents = angebote.iter().map(|x| x.summen().netto).sum();
-        let aktiv = d.auftraege.iter().filter(|x| matches!(x.status, AuftragStatus::Beauftragt | AuftragStatus::InArbeit)).count();
-        let anfragen = d.auftraege.iter().filter(|x| x.status == AuftragStatus::Anfrage).count();
 
         let mut h = String::new();
         let actions = [
-            btn("auftrag-neu", "plus", "Anfrage", "ghost", None, ""),
-            btn("dok-neu", "plus", "Angebot", "ghost", None, "angebot"),
+            btn("kunde-neu", "plus", "Kunde", "ghost", None, ""),
+            btn("dok-neu", "plus", "Bestätigung", "ghost", None, "ab"),
             btn("dok-neu", "plus", "Rechnung", "primary", None, "rechnung"),
         ]
         .concat();
@@ -235,8 +231,14 @@ impl App {
             if ueber.is_empty() { "" } else { "warn" },
             if zu_mahnen > 0 { "kpi-mahnen" } else { "kpi-offen" },
         );
-        h += &kpi("file", "Offene Angebote", &fmt_eur(angebote_sum), &format!("{} versendet, netto", angebote.len()), "", "kpi-angebote");
-        h += &kpi("briefcase", "Aufträge", &format!("{aktiv} aktiv"), &format!("{anfragen} neue Anfrage(n)"), "", "kpi-auftraege");
+        let ab_offen: Vec<&Dokument> = d
+            .dokumente
+            .iter()
+            .filter(|x| x.art == DokArt::Auftragsbestaetigung && x.storno_von.is_none() && x.status != DokStatus::Entwurf && d.vorgang(Some(x.id), None)[3].is_none())
+            .collect();
+        let ab_sum: Cents = ab_offen.iter().map(|x| x.summen().netto).sum();
+        h += &kpi("check", "Bestätigt, noch ohne Rechnung", &fmt_eur(ab_sum), &format!("{} Bestätigung(en), netto", ab_offen.len()), "", "kpi-ab");
+        h += &kpi("users", "Kunden", &d.kunden.len().to_string(), &format!("{} mit offener Rechnung", d.kunden.iter().filter(|k| offen.iter().any(|x| x.kunde_id == Some(k.id))).count()), "", "kpi-kunden");
         h += "</section>";
 
         h += "<section class=\"grid2\">";
@@ -279,33 +281,29 @@ impl App {
             h += "</div>";
         }
         h += "</div>";
-        // aktuelle Aufträge
-        let mut auf: Vec<&Auftrag> = d.auftraege.iter().filter(|x| x.status.offen()).collect();
-        auf.sort_by(|x, y| {
-            let tx = if x.termin.is_empty() { "9999" } else { &x.termin };
-            let ty = if y.termin.is_empty() { "9999" } else { &y.termin };
-            tx.cmp(ty)
-        });
-        h += "<div class=\"card\"><div class=\"card-head\"><h2>Aktuelle Aufträge &amp; Anfragen</h2></div>";
-        if auf.is_empty() {
-            h += &format!("<p class=\"muted pad\">Noch keine Aufträge.</p><div class=\"pad\">{}</div>", btn("auftrag-neu", "plus", "Anfrage erfassen", "ghost", None, ""));
+        // Bestätigungen ohne Rechnung
+        let mut abs: Vec<&Dokument> = d
+            .dokumente
+            .iter()
+            .filter(|x| x.art == DokArt::Auftragsbestaetigung && x.storno_von.is_none() && x.status != DokStatus::Storniert && d.vorgang(Some(x.id), None)[3].is_none())
+            .collect();
+        abs.sort_by(|x, y| y.datum.cmp(&x.datum));
+        h += "<div class=\"card\"><div class=\"card-head\"><h2>Bestätigt – noch ohne Rechnung</h2></div>";
+        if abs.is_empty() {
+            let _ = write!(h, "<p class=\"muted pad\">Keine offenen Bestätigungen.</p><div class=\"pad\">{}</div>", btn("dok-neu", "plus", "Bestätigung erstellen", "ghost", None, "ab"));
         } else {
             h += "<div class=\"rows\">";
-            for x in auf.iter().take(8) {
-                let termin = if x.termin.is_empty() {
-                    String::new()
-                } else if x.termin < heute {
-                    format!(" · <span class=\"neg\">Termin {}</span>", german(&x.termin))
-                } else {
-                    format!(" · Termin {}", german(&x.termin))
-                };
-                h += &format!(
-                    "<button class=\"row\" data-act=\"auftrag-open\" data-id=\"{}\"><div><b>{}</b><span>{}{}</span></div>{}</button>",
+            for x in abs.iter().take(8) {
+                let _ = write!(
+                    h,
+                    "<div class=\"row static\"><button class=\"row-main\" data-act=\"dok-open\" data-id=\"{}\"><b>{}</b><span>{} · {} · {}</span></button>{}{}</div>",
                     x.id,
-                    esc(&x.titel()),
                     esc(&d.kunden_name(x.kunde_id)),
-                    termin,
-                    badge(x.status.key(), x.status.label())
+                    esc(&x.nummer),
+                    german(&x.datum),
+                    esc(&fmt_eur(x.summen().netto)),
+                    badge(x.status_key(&heute), x.status_text(&heute)),
+                    btn("dok-folge", "receipt", "Rechnung", "primary sm", Some(x.id), "rechnung")
                 );
             }
             h += "</div>";
@@ -425,9 +423,9 @@ impl App {
         let _ = write!(
             h,
             "<div class=\"quick\">{}{}{}{}</div>",
-            btn("auftrag-neu", "plus", "Anfrage", "ghost", Some(k.id), ""),
-            btn("dok-neu-kunde", "plus", "Angebot", "ghost", Some(k.id), "angebot"),
-            btn("dok-neu-kunde", "plus", "Rechnung", "ghost", Some(k.id), "rechnung"),
+            btn("dok-neu-kunde", "plus", "Bestätigung", "ghost", Some(k.id), "ab"),
+            btn("dok-neu-kunde", "plus", "Rechnung", "primary", Some(k.id), "rechnung"),
+            String::new(),
             btn("kunde-del", "trash", "Löschen", "ghost danger-text", Some(k.id), "")
         );
         let anreden: Vec<(String, String)> = ["", "Frau", "Herr"].iter().map(|s| (s.to_string(), if s.is_empty() { "—".into() } else { s.to_string() })).collect();
@@ -463,7 +461,7 @@ impl App {
             "<div class=\"kpis small\">{}{}{}</div>",
             kpi("wallet", "Umsatz (bezahlt)", &fmt_eur(d.umsatz_kunde(k.id)), "brutto", "", ""),
             kpi("receipt", "Offen", &fmt_eur(offen), "brutto", if offen > 0 { "warn" } else { "" }, ""),
-            kpi("briefcase", "Aufträge", &d.auftraege_von(k.id).len().to_string(), "gesamt", "", "")
+            kpi("check", "Bestätigungen", &docs.iter().filter(|x| x.art == DokArt::Auftragsbestaetigung).count().to_string(), "gesamt", "", "")
         );
 
         let heute = today();
@@ -492,7 +490,7 @@ impl App {
             h += "</div></div>";
         }
         if !docs.is_empty() {
-            h += "<div class=\"card\"><div class=\"card-head\"><h2>Angebote &amp; Rechnungen</h2></div><div class=\"rows\">";
+            h += "<div class=\"card\"><div class=\"card-head\"><h2>Bestätigungen &amp; Rechnungen</h2></div><div class=\"rows\">";
             let heute = today();
             for x in docs {
                 h += &doc_row(x, d, &heute, false);
@@ -742,10 +740,33 @@ impl App {
         h
     }
 
+    /// Reiter über Rechnungen, Bestätigungen und Mahnwesen.
+    pub fn rechnung_tabs(&self, aktiv: &str) -> String {
+        let d = &self.data;
+        let heute = today();
+        let n_ab = d.dokumente.iter().filter(|x| x.art == DokArt::Auftragsbestaetigung).count();
+        let n_re = d.dokumente.iter().filter(|x| x.art == DokArt::Rechnung).count();
+        let n_mahn = d.dokumente.iter().filter(|x| x.offen() && x.zu_mahnen(&heute)).count();
+        let tab = |key: &str, act: &str, v: &str, label: &str, n: usize, warn: bool| {
+            format!(
+                "<button class=\"{}\" data-act=\"{act}\" data-v=\"{v}\">{label}{}</button>",
+                if aktiv == key { "active" } else { "" },
+                if n > 0 { format!("<em class=\"{}\">{n}</em>", if warn { "warn" } else { "" }) } else { String::new() }
+            )
+        };
+        format!(
+            "<div class=\"segmented doc-tabs\">{}{}{}</div>",
+            tab("rechnung", "dok-tab", "rechnung", "Rechnungen", n_re, false),
+            tab("ab", "dok-tab", "ab", "Bestätigungen", n_ab, false),
+            tab("mahnungen", "nav", "mahnungen", "Mahnwesen", n_mahn, true)
+        )
+    }
+
     fn dokumente_html(&self, art: DokArt) -> String {
         let mut h = String::new();
         let n = self.data.dokumente.iter().filter(|x| x.art == art).count();
         h += &head(art.plural(), &format!("{n} insgesamt"), &btn("dok-neu", "plus", art.neu_label(), "primary", None, art.key()), false);
+        h += &self.rechnung_tabs(if art == DokArt::Auftragsbestaetigung { "ab" } else if art == DokArt::Rechnung { "rechnung" } else { "" });
         h += &self.ablauf_tipp_html();
         if n == 0 {
             h += &empty(
@@ -1504,6 +1525,7 @@ impl App {
         let gemahnt: Vec<&&Dokument> = offen.iter().filter(|x| !x.mahnungen.is_empty()).collect();
         let ueber: Vec<&&Dokument> = offen.iter().filter(|x| x.ueberfaellig(&heute)).collect();
         let mut h = head("Mahnwesen", "Überfällige Rechnungen im Blick behalten und mahnen", &btn("set-tab", "settings", "Stufen & Texte", "ghost", None, "mahnung"), false);
+        h += &self.rechnung_tabs("mahnungen");
         h += "<section class=\"kpis\">";
         h += &kpi("bell", "Zu mahnen", &zu.len().to_string(), &esc(&fmt_eur(zu.iter().map(|x| x.rest()).sum())), if zu.is_empty() { "" } else { "warn" }, "");
         h += &kpi("clock", "Überfällig", &ueber.len().to_string(), &esc(&fmt_eur(ueber.iter().map(|x| x.rest()).sum())), "", "");

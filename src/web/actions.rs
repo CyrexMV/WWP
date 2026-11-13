@@ -190,6 +190,12 @@ impl App {
                 self.go_root(View::Dokumente(DokArt::Angebot));
             }
             "kpi-auftraege" => self.go_root(View::Auftraege),
+            "kpi-ab" => {
+                self.ui.dok_filter.clear();
+                self.ui.dok_q.clear();
+                self.go_root(View::Dokumente(DokArt::Auftragsbestaetigung));
+            }
+            "kpi-kunden" => self.go_root(View::Kunden(None)),
             "demo" => {
                 self.ask("Beispieldaten laden?", "Es werden Beispielkunden, -aufträge, -rechnungen und -buchungen angelegt. Du kannst sie später über „Alle Daten löschen“ entfernen.", "Laden", false, |a| {
                     a.data = backup::demo(&today());

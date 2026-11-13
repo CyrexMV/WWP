@@ -25,10 +25,8 @@ struct Treffer {
 /// Befehle: (Bezeichnung, Suchwörter, Symbol, Aktion, Wert)
 const BEFEHLE: &[(&str, &str, &str, &str, &str)] = &[
     ("Neue Rechnung", "rechnung erstellen anlegen", "receipt", "dok-neu", "rechnung"),
-    ("Neues Angebot", "angebot erstellen anlegen", "file", "dok-neu", "angebot"),
-    ("Neue Auftragsbestätigung", "bestätigung ab erstellen", "check", "dok-neu", "ab"),
+    ("Neue Auftragsbestätigung", "bestätigung ab auftrag erstellen", "check", "dok-neu", "ab"),
     ("Neuer Kunde", "kunde anlegen kontakt", "users", "kunde-neu", ""),
-    ("Neue Anfrage", "auftrag anfrage anlegen", "briefcase", "auftrag-neu", ""),
     ("Neuer Termin", "termin kalender eintragen", "calendar", "termin-neu", ""),
     ("Neue Ausgabe", "ausgabe beleg kosten buchen", "out", "buch-neu", "ausgabe"),
     ("Neue Einnahme", "einnahme buchen", "in", "buch-neu", "einnahme"),
@@ -65,6 +63,12 @@ impl App {
             }
         }
         if !leer {
+            if let Some(rang) = passt(&q, "Bestätigungen", "gehe zu auftragsbestätigung ab") {
+                bef.push(Treffer { icon: "check", farbe: 7, titel: "Gehe zu Bestätigungen".into(), text: String::new(), rechts: String::new(), act: "dok-tab".into(), id: None, v: "ab".into(), rang });
+            }
+            if let Some(rang) = passt(&q, "Mahnwesen", "gehe zu mahnung mahnen") {
+                bef.push(Treffer { icon: "bell", farbe: 7, titel: "Gehe zu Mahnwesen".into(), text: String::new(), rechts: String::new(), act: "nav".into(), id: None, v: "mahnungen".into(), rang });
+            }
             for (key, icon, label) in NAV {
                 if let Some(rang) = passt(&q, label, "gehe zu öffnen bereich") {
                     bef.push(Treffer { icon, farbe: 7, titel: format!("Gehe zu {label}"), text: String::new(), rechts: String::new(), act: "nav".into(), id: None, v: key.to_string(), rang });

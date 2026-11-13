@@ -1046,3 +1046,16 @@ kbd { font: 600 11px/1 "Inter", system-ui, sans-serif; padding: 4px 6px; border-
 .kat-grp.open .kat-sum { border-bottom: 1px solid var(--line); }
 .kat-body { display: flex; flex-direction: column; gap: 10px; padding: 10px; background: color-mix(in srgb, var(--surface2) 40%, var(--surface)); }
 @media (max-width: 560px) { .kat-spanne { display: none; } }
+
+/* Reiter Rechnungen | Bestätigungen | Mahnwesen */
+.doc-tabs { display: inline-flex; margin: -8px 0 18px; }
+.doc-tabs button { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 16px; }
+.doc-tabs em.warn { background: var(--bad); color: #fff; }
+/* Zeile mit eigenem Knopf (z. B. „Rechnung“ an einer Bestätigung) */
+.row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; border: 0; background: none; padding: 0; text-align: left; cursor: pointer; color: inherit; }
+.row-main b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row-main span { font-size: 13.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row.static .btn { flex: none; }
+.stat-tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+/* Knopfbeschriftung in Listenzeilen nicht grau einfärben */
+.todo .btn span, .row .btn span, .sr .btn span { color: inherit; font-size: inherit; overflow: visible; }

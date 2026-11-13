@@ -14,7 +14,7 @@ pub const SECTIONS: &[(&str, &str, &str, &str)] = &[
     ("brief", "palette", "Briefbogen", "Logo, Farbe, Vorschau"),
     ("nummern", "hash", "Nummern & Fristen", "Präfixe, Zahlungsziel"),
     ("mahnung", "bell", "Mahnwesen", "Stufen, Gebühren, Zinsen"),
-    ("texte", "type", "Texte & E-Mails", "Vorlagen für Angebote und Rechnungen"),
+    ("texte", "type", "Texte & E-Mails", "Vorlagen für Bestätigungen und Rechnungen"),
     ("darstellung", "moon", "Darstellung", "Farbschema und Seitenleiste"),
     ("daten", "database", "Daten & Backup", "Sichern und wiederherstellen"),
 ];
@@ -175,8 +175,7 @@ impl App {
         let f = &self.data.firma;
         let bsp = |p: &str| if p.trim().is_empty() { "2026-0001".to_string() } else { format!("{}-2026-0001", p.trim()) };
         format!(
-            "<span class=\"pill\">Angebot <b>{}</b></span><span class=\"pill\">Auftragsbestätigung <b>{}</b></span><span class=\"pill\">Rechnung <b>{}</b></span>",
-            esc(&bsp(&f.prefix_angebot)),
+            "<span class=\"pill\">Auftragsbestätigung <b>{}</b></span><span class=\"pill\">Rechnung <b>{}</b></span>",
             esc(&bsp(&f.prefix_ab)),
             esc(&bsp(&f.prefix_rechnung))
         )
@@ -396,8 +395,7 @@ impl App {
             "Nummernkreise",
             "Nummern laufen je Jahr fortlaufend und lückenlos – so wie das Finanzamt es erwartet.",
             &format!(
-                "<div class=\"form\">{}{}{}</div><div class=\"nr-bsp\" id=\"nr-bsp\">{}</div>",
-                text("Präfix Angebote", "f.prefix_angebot", &f.prefix_angebot, "autocapitalize=\"characters\""),
+                "<div class=\"form\">{}{}</div><div class=\"nr-bsp\" id=\"nr-bsp\">{}</div>",
                 text("Präfix Rechnungen", "f.prefix_rechnung", &f.prefix_rechnung, "autocapitalize=\"characters\""),
                 text("Präfix Auftragsbestätigungen", "f.prefix_ab", &f.prefix_ab, "autocapitalize=\"characters\""),
                 self.nr_beispiel()
@@ -407,9 +405,8 @@ impl App {
             "Fristen",
             "Werden bei neuen Dokumenten vorgeschlagen und lassen sich dort einzeln ändern.",
             &format!(
-                "<div class=\"form\">{}{}{}{}</div>",
+                "<div class=\"form\">{}{}{}</div>",
                 suffix("Zahlungsziel Rechnungen", "f.zahlungsziel", &f.zahlungsziel.to_string(), "Tage"),
-                suffix("Gültigkeit Angebote", "f.angebot_gueltig", &f.angebot_gueltig.to_string(), "Tage"),
                 suffix("Skonto (Standard)", "f.skonto_prozent", &format!("{}", f.skonto_prozent).replace('.', ","), "%"),
                 suffix("Skontofrist", "f.skonto_tage", &f.skonto_tage.to_string(), "Tage")
             ),
@@ -465,18 +462,6 @@ impl App {
         let f = &self.data.firma;
         let mut h = String::new();
         h += &group(
-            "Angebote",
-            "Die Briefanrede („Sehr geehrte Frau …“) wird automatisch vor die Einleitung gesetzt.",
-            &format!(
-                "<div class=\"form\">{}{}{}{}</div>{}",
-                area("Einleitung", "f.einleitung_angebot", &f.einleitung_angebot, 2, ""),
-                area("Schluss", "f.schluss_angebot", &f.schluss_angebot, 2, ""),
-                text("E-Mail-Betreff", "f.mail_betreff_angebot", &f.mail_betreff_angebot, ""),
-                area("E-Mail-Text", "f.mail_text_angebot", &f.mail_text_angebot, 6, ""),
-                placeholders(&["nummer", "betrag", "gueltig", "datum", "firma", "kunde", "ansprechpartner"])
-            ),
-        );
-        h += &group(
             "Rechnungen",
             "",
             &format!(
@@ -490,7 +475,7 @@ impl App {
         );
         h += &group(
             "Auftragsbestätigungen",
-            "",
+            "Die Briefanrede („Sehr geehrte Frau …“) wird automatisch vor die Einleitung gesetzt.",
             &format!(
                 "<div class=\"form\">{}{}</div>",
                 area("Einleitung", "f.einleitung_ab", &f.einleitung_ab, 2, ""),
@@ -628,7 +613,6 @@ impl App {
         let mut tiles = String::from("<div class=\"stat-tiles\">");
         for (n, l) in [
             (d.kunden.len(), "Kunden"),
-            (d.auftraege.len(), "Aufträge"),
             (d.dokumente.len(), "Dokumente"),
             (d.buchungen.len(), "Buchungen"),
             (d.dateien.len(), "Dateien"),

@@ -16,7 +16,8 @@ fn tage(n: i64) -> String {
 impl App {
     pub fn heute_card(&self, heute: &str) -> String {
         let d = &self.data;
-        let liste = d.aufgaben(heute);
+        // Anfragen gehören zu den (ausgeblendeten) Aufträgen
+        let liste: Vec<_> = d.aufgaben(heute).into_iter().filter(|x| x.typ != Typ::Anfragen).collect();
         let mut rows = String::new();
         let max = 7;
         for x in liste.iter().take(max) {
@@ -53,6 +54,16 @@ impl App {
                         format!("{} ist überfällig", esc(&dk.nummer)),
                         format!("{} · seit {} · {}", esc(&kunde(dk.kunde_id)), tage(x.zahl), esc(&fmt_eur(dk.rest()))),
                         btn("dok-open", "", "Öffnen", "ghost sm", x.id, ""),
+                    )
+                }
+                Typ::Abrechnen => {
+                    let dk = dok.unwrap();
+                    (
+                        "receipt",
+                        "lila",
+                        format!("Rechnung zu {} schreiben", esc(&dk.nummer)),
+                        format!("{} · bestätigt vor {} · {}", esc(&kunde(dk.kunde_id)), tage(x.zahl), esc(&fmt_eur(dk.summen().netto))),
+                        btn("dok-folge", "receipt", "Rechnung", "primary sm", x.id, "rechnung"),
                     )
                 }
                 Typ::TerminHeute | Typ::TerminMorgen => {

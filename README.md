@@ -13,23 +13,21 @@ Kunden, Aufträge, Angebote, Rechnungen und Finanzen an einem Ort – **komplett
 ## Funktionen
 
 **Assistent & Suche**
-- **Heute zu tun** auf der Übersicht: überfällige Rechnungen und Mahnungen, Angebote zum Nachfassen (7 Tage ohne
-  Antwort), abgelaufene Angebote, Termine heute/morgen, Fristen, neue Anfragen, nicht abgerechnete Arbeitszeit,
-  Ausgaben ohne Beleg und Backup-Erinnerung (alle 14 Tage) – jeweils mit direktem Knopf
+- **Heute zu tun** auf der Übersicht: überfällige Rechnungen und Mahnungen, Bestätigungen ohne Rechnung,
+  Termine heute/morgen, Ausgaben ohne Beleg und Backup-Erinnerung (alle 14 Tage) – jeweils mit direktem Knopf
 - **Globale Suche & Schnellbefehle** (Strg+K, „/“ oder Lupe): Kunden, Aufträge, Dokumente (auch nach Betrag),
   Buchungen, Termine, Leistungen und Befehle wie „Neue Rechnung“ in einem Feld, mit Pfeiltasten bedienbar
 
-**Kunden- und Auftragsverwaltung (CRM)**
-- Kunden mit Kundennummer (K-1001 …), Anschrift, Ansprechpartner, E-Mail, Telefon, USt-IdNr., Notizen
-- Suche, Umsatz (bezahlt) und offene Beträge je Kunde, alle Aufträge und Dokumente des Kunden auf einen Blick
-- Direkt aus dem Kunden: E-Mail schreiben, anrufen, Anfrage/Angebot/Rechnung anlegen
-- **Zeiterfassung pro Auftrag**: Stoppuhr (läuft auch im Hintergrund weiter), Zeiten nachtragen („1:30“, „1,5“),
-  Tätigkeit je Eintrag; mit einem Tipp als Positionen (Std. × Stundensatz) in die Rechnung übernehmen
-- **Auftrags-Board** von der Anfrage bis zur Abrechnung: *Anfrage → Angebot gesendet → Beauftragt → In Arbeit →
-  Erledigt → Abgerechnet* (plus *Abgelehnt*), mit Termin, geschätztem Wert und „Weiter“-Knopf auf jeder Karte
-- Verlauf je Auftrag (Statuswechsel und eigene Notizen mit Datum)
-- Der Status läuft automatisch mit: Angebot versendet → „Angebot gesendet“, angenommen → „Beauftragt“,
-  Rechnung versendet → „Erledigt“, bezahlt → „Abgerechnet“
+**Einfacher Ablauf: Kunde → Bestätigung → Rechnung**
+- Seitenleiste: Übersicht, Kunden, Rechnungen (mit Reitern *Rechnungen · Bestätigungen · Mahnwesen*), Kalender,
+  Finanzen, Leistungskatalog
+- Beim Kunden **+ Bestätigung** (Auftragsbestätigung, auf Wunsch vor Ort unterschreiben lassen) oder direkt
+  **+ Rechnung**; aus der Bestätigung wird mit einem Tipp die Rechnung (Kunde und Positionen werden übernommen)
+- Übersicht: „Bestätigt – noch ohne Rechnung“ mit Knopf zur Rechnung
+- Kunden mit Kundennummer (K-1001 …), Anschrift, Ansprechpartner, E-Mail, Telefon, USt-IdNr., Notizen;
+  Umsatz und offene Beträge je Kunde, alle Dokumente des Kunden auf einen Blick
+- Angebote, Aufträge (Board) und Zeiterfassung sind ausgeblendet; früher angelegte Daten bleiben erhalten und
+  sind über Kunde und Suche erreichbar
 
 **Angebots- und Rechnungsgenerator**
 - Fertige PDFs im DIN-5008-Briefbogen: **dein Logo** (PNG/JPG), Absenderzeile, Anschriftfeld, Infoblock
@@ -42,15 +40,12 @@ Kunden, Aufträge, Angebote, Rechnungen und Finanzen an einem Ort – **komplett
   Kategorien zum Auf- und Zuklappen mit Anzahl und Preisspanne
 - **Per E-Mail senden**: PDF wird angehängt, Empfänger, Betreff und Text sind vorausgefüllt (Gmail, Outlook,
   Samsung E-Mail …) – oder an WhatsApp/Drive teilen; PDF ansehen oder in *Download/Zento* speichern
-- Fortlaufende Nummern je Jahr (AN-2026-0001, RE-2026-0001), Präfixe einstellbar
-- **Ablauf auf einen Blick**: Angebot → Auftragsbestätigung → Rechnung. Im Dokument und im Auftrag zeigt eine
-  Schrittleiste, was schon da ist und was als Nächstes kommt; „Erstellen“ übernimmt Kunde, Anschrift und
-  Positionen. Duplizieren unter „Weitere Aktionen“
-- **Auftragsbestätigung** als eigenes Dokument mit Nummernkreis, erstellt aus Angebot oder Auftrag; daraus wird
-  mit einem Tipp die Rechnung
+- Fortlaufende Nummern je Jahr (AB-2026-0001, RE-2026-0001), Präfixe einstellbar
+- **Ablauf auf einen Blick**: Auftragsbestätigung → Rechnung. Im Dokument zeigt eine Schrittleiste, was schon da
+  ist und was als Nächstes kommt; „Erstellen“ übernimmt Kunde, Anschrift und Positionen. Duplizieren unter
+  „Weitere Aktionen“
 - **Unterschrift per S-Pen**: Der Kunde unterschreibt direkt auf dem Tablet (Druckstufen, Handballen wird
-  ignoriert) – Angebot angenommen oder Auftrag bestätigt; die Unterschrift erscheint als
-  Vektor-Tinte mit Ort, Datum und Name im PDF, der Auftrag läuft automatisch mit
+  ignoriert) – Auftrag bestätigt; die Unterschrift erscheint als Vektor-Tinte mit Ort, Datum und Name im PDF
 - **E-Rechnung**: Rechnungs-PDFs sind PDF/A-3 mit eingebetteten Rechnungsdaten nach EN 16931 (**ZUGFeRD/Factur-X**);
   zusätzlich **XRechnung 3.0** als XML-Datei (z. B. für Behörden mit Leitweg-ID). Vor dem Versand werden die
   Pflichtangaben geprüft; die Ausgabe ist gegen das offizielle XSD und die EN-16931-/XRechnung-Prüfregeln getestet

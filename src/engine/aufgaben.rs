@@ -11,6 +11,8 @@ pub enum Typ {
     Mahnen,
     /// Rechnung überfällig, Mahnfrist noch nicht erreicht (Dokument)
     Ueberfaellig,
+    /// Bestätigung versendet/unterschrieben, aber noch keine Rechnung (Dokument)
+    Abrechnen,
     /// Termin heute (Termin)
     TerminHeute,
     /// Termin morgen (Termin)
@@ -74,6 +76,11 @@ impl Data {
                         if seit >= NACHFASSEN_TAGE {
                             v.push(a(Typ::Nachfassen, Some(d.id), seit, false));
                         }
+                    }
+                }
+                DokArt::Auftragsbestaetigung if matches!(d.status, DokStatus::Versendet | DokStatus::Unterschrieben) => {
+                    if self.vorgang(Some(d.id), None)[3].is_none() {
+                        v.push(a(Typ::Abrechnen, Some(d.id), tage(if d.versendet_am.is_empty() { &d.datum } else { &d.versendet_am }), false));
                     }
                 }
                 _ => {}
@@ -161,6 +168,12 @@ mod tests {
         assert!(typen.contains(&Typ::Nachfassen));
         assert!(typen.contains(&Typ::Frist));
         assert!(typen.contains(&Typ::Anfragen));
+        // Bestätigung ohne Rechnung → abrechnen; mit Rechnung verschwindet der Punkt
+        let ab = d.neues_dokument(DokArt::Auftragsbestaetigung, Some(k), None, "2026-11-12");
+        d.dokument_mut(ab).unwrap().status = DokStatus::Unterschrieben;
+        assert!(d.aufgaben("2026-11-13").iter().any(|x| x.typ == Typ::Abrechnen && x.id == Some(ab)));
+        d.folgedokument(ab, DokArt::Rechnung, "2026-11-13");
+        assert!(!d.aufgaben("2026-11-13").iter().any(|x| x.typ == Typ::Abrechnen));
         // laufende Stoppuhr steht immer oben
         d.uhr_starten(au, 0.0);
         assert_eq!(d.aufgaben("2026-11-13")[0].typ, Typ::Uhr);

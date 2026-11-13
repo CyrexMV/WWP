@@ -172,8 +172,8 @@ pub fn demo(heute: &str) -> Data {
         r.positionen = vec![Position { text: "Abschlagszahlung Material".into(), menge: 1.0, einheit: "Pausch.".into(), preis: 40_000, ust: 19, ..Default::default() }];
         r.status = DokStatus::Versendet;
     }
-    // Angebot
-    let a1 = d.neues_dokument(DokArt::Angebot, Some(kid[2]), Some(aid[2]), &add_days(heute, -5));
+    // Auftragsbestätigung (noch ohne Rechnung)
+    let a1 = d.neues_dokument(DokArt::Auftragsbestaetigung, Some(kid[2]), Some(aid[2]), &add_days(heute, -5));
     {
         let a = d.dokument_mut(a1).unwrap();
         a.positionen = vec![
@@ -181,6 +181,7 @@ pub fn demo(heute: &str) -> Data {
             Position { text: "Anfahrt (Pauschale)".into(), menge: 1.0, einheit: "Pausch.".into(), preis: 3_500, ust: 19, ..Default::default() },
         ];
         a.status = DokStatus::Versendet;
+        a.versendet_am = add_days(heute, -5);
     }
     // Ausgaben
     let ausgaben = [
