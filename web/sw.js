@@ -16,7 +16,8 @@ const FILES = [
 ];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES)).then(() => self.skipWaiting()));
+  // cache: 'reload' – beim Update nie veraltete Dateien aus dem Browser-Zwischenspeicher übernehmen
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES.map((f) => new Request(f, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (e) => {
@@ -30,8 +31,11 @@ self.addEventListener('activate', (e) => {
 // Netzwerk zuerst (für Updates), bei fehlender Verbindung aus dem Cache.
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
+  // eigene Dateien immer beim Server nachfragen (no-cache = mit ETag prüfen, kostet kaum Datenvolumen),
+  // damit eine neue Version sofort ankommt und nicht erst nach Ablauf des Zwischenspeichers
+  const eigen = new URL(e.request.url).origin === location.origin;
   e.respondWith(
-    fetch(e.request)
+    (eigen ? fetch(e.request.url, { cache: 'no-cache', credentials: 'same-origin' }) : fetch(e.request))
       .then((res) => {
         if (res.ok && new URL(e.request.url).origin === location.origin) {
           const copy = res.clone();

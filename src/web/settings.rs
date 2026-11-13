@@ -528,30 +528,64 @@ impl App {
                 ),
             );
         }
-        let mut body = String::from("<div class=\"katalog\">");
-        let mut letzte_kat = None;
+        // nach Kategorie gruppieren (Reihenfolge wie im Katalog, „Ohne Kategorie“ zuletzt)
+        let mut gruppen: Vec<(String, Vec<usize>)> = Vec::new();
         for (i, l) in self.data.katalog.iter().enumerate() {
-            let kat = l.kategorie.trim();
-            if letzte_kat != Some(kat) && !kat.is_empty() {
-                let _ = write!(body, "<div class=\"kat-head\">{}</div>", esc(kat));
+            let k = l.kategorie.trim().to_string();
+            match gruppen.iter_mut().find(|g| g.0 == k) {
+                Some(g) => g.1.push(i),
+                None => gruppen.push((k, vec![i])),
             }
-            letzte_kat = Some(kat);
-            let ust: Vec<(String, String)> = [19u8, 7, 0].iter().map(|r| (r.to_string(), format!("{r} %"))).collect();
-            let mut opts = String::new();
-            for (v, lb) in &ust {
-                let _ = write!(opts, "<option value=\"{v}\"{}>{lb}</option>", if *v == l.ust.to_string() { " selected" } else { "" });
-            }
+        }
+        gruppen.sort_by_key(|g| g.0.is_empty());
+        let alle_offen = gruppen.iter().all(|g| self.ui.kat_offen.contains(&g.0));
+        let mut body = format!(
+            "<div class=\"kat-tools\"><span class=\"muted small\">{} Kategorien – zum Bearbeiten antippen</span>{}</div><div class=\"katalog\">",
+            gruppen.len(),
+            if alle_offen { btn("kat-alle", "up", "Alle zuklappen", "ghost sm", None, "zu") } else { btn("kat-alle", "down", "Alle aufklappen", "ghost sm", None, "auf") }
+        );
+        for (kat, idx) in &gruppen {
+            let offen = self.ui.kat_offen.contains(kat);
+            let preise: Vec<i64> = idx.iter().map(|i| self.data.katalog[*i].preis).filter(|p| *p > 0).collect();
+            let spanne = match (preise.iter().min(), preise.iter().max()) {
+                (Some(a), Some(b)) if a == b => crate::engine::money::fmt_eur(*a),
+                (Some(a), Some(b)) => format!("{} – {}", crate::engine::money::fmt_eur(*a), crate::engine::money::fmt_eur(*b)),
+                _ => String::new(),
+            };
             let _ = write!(
                 body,
-                "<div class=\"kat-row\">{}{}{}{}{}<label class=\"field\"><span>USt.</span><select data-f=\"l.{i}.ust\">{opts}</select></label><div class=\"marge\" id=\"marge-{i}\">{}</div><button class=\"icon-btn sm danger-text\" data-act=\"kat-del\" data-v=\"{i}\" title=\"Entfernen\">{}</button></div>",
-                area("Bezeichnung", &format!("l.{i}.text"), &l.text, l.text.lines().map(|z| (z.chars().count() as u32).div_ceil(26).max(1)).sum::<u32>().clamp(1, 4), "placeholder=\"z. B. Arbeitsstunde – zweite Zeile = Beschreibung\""),
-                text("Kategorie", &format!("l.{i}.kategorie"), &l.kategorie, "list=\"kategorien\" placeholder=\"z. B. Arbeit\""),
-                text("Einheit", &format!("l.{i}.einheit"), &l.einheit, "list=\"einheiten\""),
-                money_f("EK netto", &format!("l.{i}.ek"), l.ek, "placeholder=\"0,00\""),
-                money_f("VK netto", &format!("l.{i}.preis"), l.preis, "placeholder=\"0,00\""),
-                marge_html(l),
-                ic("trash")
+                "<section class=\"kat-grp{}\"><button class=\"kat-sum\" data-act=\"kat-toggle\" data-v=\"{}\">{}<b>{}</b><span class=\"count\">{}</span><span class=\"kat-spanne\">{}</span></button>",
+                if offen { " open" } else { "" },
+                esc(kat),
+                ic("chevron"),
+                esc(if kat.is_empty() { "Ohne Kategorie" } else { kat }),
+                idx.len(),
+                esc(&spanne)
             );
+            if !offen {
+                body += "</section>";
+                continue;
+            }
+            body += "<div class=\"kat-body\">";
+            for &i in idx {
+                let l = &self.data.katalog[i];
+                let mut opts = String::new();
+                for r in [19u8, 7, 0] {
+                    let _ = write!(opts, "<option value=\"{r}\"{}>{r} %</option>", if r == l.ust { " selected" } else { "" });
+                }
+                let _ = write!(
+                    body,
+                    "<div class=\"kat-row\">{}{}{}{}{}<label class=\"field\"><span>USt.</span><select data-f=\"l.{i}.ust\">{opts}</select></label><div class=\"marge\" id=\"marge-{i}\">{}</div><button class=\"icon-btn sm danger-text\" data-act=\"kat-del\" data-v=\"{i}\" title=\"Entfernen\">{}</button></div>",
+                    area("Bezeichnung", &format!("l.{i}.text"), &l.text, l.text.lines().map(|z| (z.chars().count() as u32).div_ceil(26).max(1)).sum::<u32>().clamp(1, 4), "placeholder=\"z. B. Arbeitsstunde – zweite Zeile = Beschreibung\""),
+                    text("Kategorie", &format!("l.{i}.kategorie"), &l.kategorie, "list=\"kategorien\" placeholder=\"z. B. Arbeit\""),
+                    text("Einheit", &format!("l.{i}.einheit"), &l.einheit, "list=\"einheiten\""),
+                    money_f("EK netto", &format!("l.{i}.ek"), l.ek, "placeholder=\"0,00\""),
+                    money_f("VK netto", &format!("l.{i}.preis"), l.preis, "placeholder=\"0,00\""),
+                    marge_html(l),
+                    ic("trash")
+                );
+            }
+            body += "</div></section>";
         }
         body += "<datalist id=\"kategorien\">";
         let mut kats: Vec<&str> = self.data.katalog.iter().map(|l| l.kategorie.trim()).filter(|k| !k.is_empty()).collect();

@@ -1030,3 +1030,19 @@ kbd { font: 600 11px/1 "Inter", system-ui, sans-serif; padding: 4px 6px; border-
 .kat-row .field textarea { min-height: 46px; resize: vertical; }
 .li[data-act="kat-pick"] > div:first-child { display: flex; flex-direction: column; min-width: 0; flex: 1; }
 .kat-row .field.wide { grid-column: auto; }
+
+/* Leistungskatalog: Kategorien zum Auf- und Zuklappen */
+.kat-tools { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 22px 2px; flex-wrap: wrap; }
+.katalog { gap: 10px; }
+.kat-grp { border: 1px solid var(--line); border-radius: 16px; overflow: hidden; background: var(--surface); }
+.kat-sum { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 58px; padding: 10px 16px; border: 0; background: none; cursor: pointer; text-align: left; color: var(--text); transition: background .15s; }
+.kat-sum:hover { background: var(--surface2); }
+.kat-sum > .ic { width: 18px; height: 18px; color: var(--muted); transition: transform .18s; flex: none; }
+.kat-grp.open .kat-sum > .ic { transform: rotate(90deg); color: var(--accent); }
+.kat-sum b { font-size: 15.5px; font-weight: 650; }
+.kat-sum .count { min-width: 26px; height: 24px; padding: 0 8px; border-radius: 12px; background: var(--accent-soft); color: var(--accent); font-size: 12.5px; font-weight: 700; display: grid; place-items: center; }
+.kat-spanne { margin-left: auto; font-size: 13.5px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.kat-grp.open { border-color: color-mix(in srgb, var(--accent) 30%, var(--line)); box-shadow: 0 10px 24px -18px rgba(76, 52, 200, .6); }
+.kat-grp.open .kat-sum { border-bottom: 1px solid var(--line); }
+.kat-body { display: flex; flex-direction: column; gap: 10px; padding: 10px; background: color-mix(in srgb, var(--surface2) 40%, var(--surface)); }
+@media (max-width: 560px) { .kat-spanne { display: none; } }

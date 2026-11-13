@@ -81,6 +81,8 @@ pub struct Ui {
     pub kal_ansicht: String,
     /// Rechnung, deren Mahnungs-Dialog offen ist
     pub mahn_dok: Option<Id>,
+    /// aufgeklappte Kategorien im Leistungskatalog ("" = ohne Kategorie)
+    pub kat_offen: HashSet<String>,
 }
 
 /// Aktion, die nach „Ja“ in einer Sicherheitsabfrage ausgeführt wird.

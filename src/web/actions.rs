@@ -867,7 +867,23 @@ impl App {
                     },
                 );
             }
+            "kat-toggle" => {
+                if !self.ui.kat_offen.remove(v) {
+                    self.ui.kat_offen.insert(v.to_string());
+                }
+                self.render();
+            }
+            "kat-alle" => {
+                if v == "auf" {
+                    self.ui.kat_offen = self.data.katalog.iter().map(|l| l.kategorie.trim().to_string()).collect();
+                } else {
+                    self.ui.kat_offen.clear();
+                }
+                self.render();
+            }
             "kat-add" => {
+                // neue Leistung landet unter „Ohne Kategorie“ – die Gruppe aufklappen
+                self.ui.kat_offen.insert(String::new());
                 let id = self.data.new_id();
                 let ust = self.data.firma.ust_satz();
                 self.data.katalog.push(Leistung { id, ust, ..Default::default() });
@@ -1180,7 +1196,11 @@ impl App {
                     "einheit" => l.einheit = v.to_string(),
                     "preis" => l.preis = parse_amount(v).unwrap_or(0),
                     "ek" => l.ek = parse_amount(v).unwrap_or(0),
-                    "kategorie" => l.kategorie = v.trim().to_string(),
+                    "kategorie" => {
+                        l.kategorie = v.trim().to_string();
+                        // die neue Gruppe ist beim nächsten Aufbau gleich offen
+                        self.ui.kat_offen.insert(v.trim().to_string());
+                    }
                     "ust" => l.ust = v.parse().unwrap_or(19),
                     _ => return,
                 }
