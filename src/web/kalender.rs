@@ -8,7 +8,63 @@ use crate::engine::model::{AuftragStatus, Id};
 use crate::engine::termine::{ics, kalenderwoche, wochenanfang, Termin, WT_KURZ};
 use std::fmt::Write as _;
 
+/// Kurzzeichen (Initialen) eines Namens für die Monteur-Plakette.
+pub fn initialen(name: &str) -> String {
+    let teile: Vec<&str> = name.split_whitespace().collect();
+    match teile.as_slice() {
+        [] => "?".into(),
+        [a] => a.chars().take(2).collect::<String>().to_uppercase(),
+        [a, .., b] => format!("{}{}", a.chars().next().unwrap_or(' '), b.chars().next().unwrap_or(' ')).to_uppercase(),
+    }
+}
+
+/// Plakette „TM Tom Monteur“ (leer, wenn niemand zugewiesen ist).
+pub fn monteur_chip(t: &Termin, lang: bool) -> String {
+    if !t.zugewiesen() {
+        return String::new();
+    }
+    let name = if t.monteur_name.trim().is_empty() { "Monteur" } else { t.monteur_name.trim() };
+    if lang {
+        format!("<span class=\"mchip\"><i>{}</i>{}</span>", esc(&initialen(name)), esc(name))
+    } else {
+        format!("<i class=\"mchip-k\" title=\"{}\">{}</i>", esc(name), esc(&initialen(name)))
+    }
+}
+
 impl App {
+    /// Wer bin ich (für „meine Termine“)? (Cloud-ID, Name auf diesem Gerät)
+    pub fn ich(&self) -> (String, String) {
+        (super::cloud::meine_id(), super::wartung::monteur_name())
+    }
+
+    /// Termin im Kalender sichtbar? (Filter nach Monteur)
+    pub fn termin_sichtbar(&self, t: &Termin) -> bool {
+        if self.monteur() {
+            if self.ui.kal_alle {
+                return true;
+            }
+            let (id, name) = self.ich();
+            return t.gehoert(&id, &name);
+        }
+        match self.ui.kal_monteur.as_str() {
+            "" => true,
+            "_frei" => !t.zugewiesen(),
+            k => t.monteur == k || (t.monteur.is_empty() && t.monteur_name.trim().eq_ignore_ascii_case(k)),
+        }
+    }
+
+    /// Auswahl der Monteure: (Schlüssel, Anzeige) – Team aus der Cloud, sonst bisher verwendete Namen.
+    pub fn monteur_auswahl(&self) -> Vec<(String, String)> {
+        let team = super::cloud::team();
+        if !team.is_empty() {
+            return team.iter().map(|m| (m.user_id.clone(), format!("{}{}", m.anzeige(), if m.rolle == "chef" { " (Chef)" } else { "" }))).collect();
+        }
+        let mut namen: Vec<String> = self.data.termine.iter().map(|t| t.monteur_name.trim().to_string()).filter(|n| !n.is_empty()).collect();
+        namen.sort_by_key(|n| n.to_lowercase());
+        namen.dedup_by(|a, b| a.eq_ignore_ascii_case(b));
+        namen.into_iter().map(|n| (n.clone(), n)).collect()
+    }
+
     fn kal_tag(&self) -> String {
         if date::parse(&self.ui.kal_tag).is_some() {
             self.ui.kal_tag.clone()
@@ -30,21 +86,23 @@ impl App {
                 esc(&a.titel())
             );
         }
-        for t in self.data.termine_am(tag) {
+        for t in self.data.termine_am(tag).into_iter().filter(|t| self.termin_sichtbar(t)) {
             let kunde = self.data.kunde(t.kunde_id).map(|k| k.name()).unwrap_or_default();
             if kompakt {
                 let zeit = if t.ganztag() { String::new() } else { format!("<em>{}</em>", esc(t.von.trim())) };
-                let _ = write!(h, "<button class=\"ev\" data-act=\"termin-open\" data-id=\"{}\">{zeit}<span>{}</span></button>", t.id, esc(&t.titel));
+                let _ = write!(h, "<button class=\"ev\" data-act=\"termin-open\" data-id=\"{}\">{zeit}<span>{}</span>{}</button>", t.id, esc(&t.titel), monteur_chip(t, false));
             } else {
                 let _ = write!(
                     h,
-                    "<button class=\"ev big{}\" data-act=\"termin-open\" data-id=\"{}\"><em>{}</em><b>{}</b>{}{}</button>",
+                    "<button class=\"ev big{}{}\" data-act=\"termin-open\" data-id=\"{}\"><em>{}</em><b>{}</b>{}{}{}</button>",
                     if t.ganztag() { " allday" } else { "" },
+                    if t.zugewiesen() { "" } else { " frei" },
                     t.id,
                     esc(&t.zeit()),
                     esc(&t.titel),
                     if kunde.is_empty() { String::new() } else { format!("<span>{}</span>", esc(&kunde)) },
-                    if t.ort.trim().is_empty() { String::new() } else { format!("<span class=\"ort\">{}{}</span>", ic("map"), esc(t.ort.trim())) }
+                    if t.ort.trim().is_empty() { String::new() } else { format!("<span class=\"ort\">{}{}</span>", ic("map"), esc(t.ort.trim())) },
+                    monteur_chip(t, true)
                 );
             }
         }
@@ -73,6 +131,7 @@ impl App {
             btn("termin-neu", "plus", "Termin", "primary", None, &tag)
         );
         let mut h = head("Kalender", &titel, &actions, false);
+        h += &self.kal_filter_html();
         if monat_ansicht {
             let erster = date::iso(y, m, 1);
             let raster_start = wochenanfang(&erster);
@@ -114,7 +173,7 @@ impl App {
             h += "</div>";
         }
         // kommende Termine
-        let kommend = self.data.naechste_termine(&heute, 8);
+        let kommend: Vec<_> = self.data.naechste_termine(&heute, 200).into_iter().filter(|t| self.termin_sichtbar(t)).take(8).collect();
         if !kommend.is_empty() {
             h += "<div class=\"card\"><div class=\"card-head\"><h2>Nächste Termine</h2></div><div class=\"rows\">";
             for t in kommend {
@@ -122,6 +181,32 @@ impl App {
             }
             h += "</div></div>";
         }
+        h
+    }
+
+    /// Filter nach Monteur (Chef) bzw. „Meine / Alle“ (Monteur).
+    fn kal_filter_html(&self) -> String {
+        if self.monteur() {
+            return format!(
+                "<div class=\"chips kal-filter\"><button class=\"chip{}\" data-act=\"kal-alle\" data-v=\"0\">Meine Termine</button><button class=\"chip{}\" data-act=\"kal-alle\" data-v=\"1\">Alle</button></div>",
+                if self.ui.kal_alle { "" } else { " active" },
+                if self.ui.kal_alle { " active" } else { "" }
+            );
+        }
+        let auswahl = self.monteur_auswahl();
+        let frei = self.data.termine.iter().any(|t| !t.zugewiesen());
+        if auswahl.is_empty() {
+            return String::new();
+        }
+        let akt = self.ui.kal_monteur.as_str();
+        let mut h = format!("<div class=\"chips kal-filter\"><button class=\"chip{}\" data-act=\"kal-monteur\" data-v=\"\">Alle</button>", if akt.is_empty() { " active" } else { "" });
+        for (k, name) in &auswahl {
+            let _ = write!(h, "<button class=\"chip{}\" data-act=\"kal-monteur\" data-v=\"{}\"><i class=\"mchip-k\">{}</i>{}</button>", if akt == k { " active" } else { "" }, esc(k), esc(&initialen(name)), esc(name));
+        }
+        if frei {
+            let _ = write!(h, "<button class=\"chip{}\" data-act=\"kal-monteur\" data-v=\"_frei\">Nicht zugewiesen</button>", if akt == "_frei" { " active" } else { "" });
+        }
+        h += "</div>";
         h
     }
 
@@ -147,6 +232,39 @@ impl App {
         for k in ks {
             let _ = write!(kunden, "<option value=\"{}\"{}>{}</option>", k.id, if Some(k.id) == t.kunde_id { " selected" } else { "" }, esc(&k.name()));
         }
+        // Monteur-Zuweisung: Team aus der Cloud als Auswahl, sonst freier Name
+        let team = super::cloud::team();
+        let monteur_feld = if self.monteur() {
+            let name = if t.zugewiesen() { t.monteur_name.clone() } else { "nicht zugewiesen".into() };
+            format!("<label class=\"field wide\"><span>Monteur</span><input type=\"text\" value=\"{}\" disabled></label>", esc(&name))
+        } else if !team.is_empty() {
+            let mut o = String::from("<option value=\"\">— nicht zugewiesen —</option>");
+            for m in &team {
+                let _ = write!(
+                    o,
+                    "<option value=\"{}\" data-name=\"{}\"{}>{}{}</option>",
+                    esc(&m.user_id),
+                    esc(&m.anzeige()),
+                    if m.user_id == t.monteur { " selected" } else { "" },
+                    esc(&m.anzeige()),
+                    if m.rolle == "chef" { " (Chef)" } else { "" }
+                );
+            }
+            // zugewiesen, aber nicht (mehr) im Team
+            if !t.monteur.is_empty() && !team.iter().any(|m| m.user_id == t.monteur) {
+                let _ = write!(o, "<option value=\"{}\" selected>{}</option>", esc(&t.monteur), esc(&t.monteur_name));
+            }
+            format!("<label class=\"field wide\"><span>Monteur</span><select id=\"tm-monteur\">{o}</select></label>")
+        } else {
+            let mut dl = String::new();
+            for (_, n) in self.monteur_auswahl() {
+                let _ = write!(dl, "<option value=\"{}\">", esc(&n));
+            }
+            format!(
+                "<label class=\"field wide\"><span>Monteur</span><input type=\"text\" id=\"tm-monteur-name\" list=\"monteure\" value=\"{}\" placeholder=\"Name – leer = nicht zugewiesen\"><datalist id=\"monteure\">{dl}</datalist></label>",
+                esc(&t.monteur_name)
+            )
+        };
         let extra = if neu {
             String::new()
         } else {
@@ -158,7 +276,7 @@ impl App {
             )
         };
         let html = format!(
-            "<h3>{}</h3><div class=\"form\"><label class=\"field wide\"><span>Titel</span><input type=\"text\" id=\"tm-titel\" value=\"{}\" placeholder=\"z. B. Besichtigung, Montage, Wartung\" autofocus></label><label class=\"field\"><span>Datum</span><input type=\"date\" id=\"tm-datum\" value=\"{}\"></label><label class=\"field\"><span>Bis (mehrtägig)</span><input type=\"date\" id=\"tm-bis-datum\" value=\"{}\"></label><label class=\"field\"><span>Beginn</span><input type=\"time\" id=\"tm-von\" value=\"{}\"></label><label class=\"field\"><span>Ende</span><input type=\"time\" id=\"tm-bis\" value=\"{}\"></label><label class=\"field wide\"><span>Ort / Adresse</span><input type=\"text\" id=\"tm-ort\" value=\"{}\"></label><label class=\"field\"><span>Auftrag</span><select id=\"tm-auftrag\">{auftraege}</select></label><label class=\"field\"><span>Kunde</span><select id=\"tm-kunde\">{kunden}</select></label><label class=\"field wide\"><span>Notiz</span><textarea id=\"tm-notiz\" rows=\"2\">{}</textarea></label><p class=\"hint wide\">Ohne Beginn gilt der Termin als ganztägig.</p></div><div class=\"modal-actions spread\">{extra}<span class=\"flex1\"></span>{}<button class=\"btn primary\" data-act=\"termin-save\" data-id=\"{}\" data-enter>{}<span>Speichern</span></button></div>",
+            "<h3>{}</h3><div class=\"form\"><label class=\"field wide\"><span>Titel</span><input type=\"text\" id=\"tm-titel\" value=\"{}\" placeholder=\"z. B. Besichtigung, Montage, Wartung\" autofocus></label><label class=\"field\"><span>Datum</span><input type=\"date\" id=\"tm-datum\" value=\"{}\"></label><label class=\"field\"><span>Bis (mehrtägig)</span><input type=\"date\" id=\"tm-bis-datum\" value=\"{}\"></label><label class=\"field\"><span>Beginn</span><input type=\"time\" id=\"tm-von\" value=\"{}\"></label><label class=\"field\"><span>Ende</span><input type=\"time\" id=\"tm-bis\" value=\"{}\"></label><label class=\"field wide\"><span>Ort / Adresse</span><input type=\"text\" id=\"tm-ort\" value=\"{}\"></label><label class=\"field\"><span>Auftrag</span><select id=\"tm-auftrag\">{auftraege}</select></label><label class=\"field\"><span>Kunde</span><select id=\"tm-kunde\">{kunden}</select></label>{monteur_feld}<label class=\"field wide\"><span>Notiz</span><textarea id=\"tm-notiz\" rows=\"2\">{}</textarea></label><p class=\"hint wide\">Ohne Beginn gilt der Termin als ganztägig.</p></div><div class=\"modal-actions spread\">{extra}<span class=\"flex1\"></span>{}<button class=\"btn primary\" data-act=\"termin-save\" data-id=\"{}\" data-enter>{}<span>Speichern</span></button></div>",
             if neu { "Neuer Termin" } else { "Termin bearbeiten" },
             esc(&t.titel),
             esc(&t.datum),
@@ -203,6 +321,39 @@ impl App {
             t.kunde_id = kunde.or(t.kunde_id.filter(|_| auftrag.is_some()));
             t.notiz = value_of("tm-notiz");
         }
+        if !self.monteur() {
+            if super::el("tm-monteur").is_some() {
+                let uid = value_of("tm-monteur");
+                let name = super::cloud::team().into_iter().find(|m| m.user_id == uid).map(|m| m.anzeige());
+                if let Some(t) = self.data.termin_mut(tid) {
+                    match name {
+                        Some(n) => {
+                            t.monteur = uid;
+                            t.monteur_name = n;
+                        }
+                        None if uid.is_empty() => {
+                            t.monteur.clear();
+                            t.monteur_name.clear();
+                        }
+                        None => {} // ehemaliges Teammitglied bleibt eingetragen
+                    }
+                }
+            } else if super::el("tm-monteur-name").is_some() {
+                let name = value_of("tm-monteur-name").trim().to_string();
+                if let Some(t) = self.data.termin_mut(tid) {
+                    t.monteur.clear();
+                    t.monteur_name = name;
+                }
+            }
+        } else if id.is_none_or(|i| i == 0) {
+            // Monteur legt einen Termin an: sich selbst zuweisen
+            let (uid, name) = self.ich();
+            let name = if name.trim().is_empty() { super::cloud::team().into_iter().find(|m| m.user_id == uid).map(|m| m.anzeige()).unwrap_or_default() } else { name };
+            if let Some(t) = self.data.termin_mut(tid) {
+                t.monteur = uid;
+                t.monteur_name = name;
+            }
+        }
         self.ui.kal_tag = datum;
         self.close_modal();
         self.changed();
@@ -227,6 +378,9 @@ impl App {
         }
         if !t.notiz.trim().is_empty() {
             beschr.push(t.notiz.trim().to_string());
+        }
+        if t.zugewiesen() {
+            beschr.push(format!("Monteur: {}", t.monteur_name.trim()));
         }
         let datei = ics(&self.data, &[t], &today());
         super::storage::kalender_eintragen(t, &beschr.join("\n"), &datei);
@@ -272,12 +426,13 @@ pub fn termin_row(a: &App, t: &Termin) -> String {
     let kunde = a.data.kunde(t.kunde_id).map(|k| k.name()).unwrap_or_default();
     let unter = [t.zeit(), kunde, t.ort.trim().to_string()].into_iter().filter(|s| !s.is_empty()).collect::<Vec<_>>().join(" · ");
     format!(
-        "<button class=\"row\" data-act=\"termin-open\" data-id=\"{}\"><div class=\"tdate{}\">{}</div><div><b>{}</b><span>{}</span></div><div class=\"row-r\">{}</div></button>",
+        "<button class=\"row\" data-act=\"termin-open\" data-id=\"{}\"><div class=\"tdate{}\">{}</div><div><b>{}</b><span>{}</span></div><div class=\"row-r\">{}{}</div></button>",
         t.id,
         if t.datum == heute { " heute" } else { "" },
         esc(&tag),
         esc(&t.titel),
         esc(&unter),
+        monteur_chip(t, true),
         ic("chevron")
     )
 }

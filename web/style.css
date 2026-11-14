@@ -1109,3 +1109,15 @@ button.foto.leer span { font-size: 13px; }
 .konto-fehler:empty { display: none; }
 .konto-fehler:not(:empty) { margin-bottom: 14px; }
 .code-gross { font: 800 38px/1.1 ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: .18em; text-align: center; padding: 22px 12px; border-radius: 18px; background: var(--accent-soft); color: var(--accent); user-select: all; }
+
+/* --- Monteur-Zuweisung an Terminen --------------------------------------------------- */
+.mchip { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; color: var(--muted); white-space: nowrap; }
+.mchip i, .mchip-k { font-style: normal; display: inline-grid; place-items: center; min-width: 22px; height: 22px; padding: 0 4px; border-radius: 11px; background: var(--grad); color: #fff; font-size: 10.5px; font-weight: 800; letter-spacing: .02em; flex: none; }
+.ev .mchip-k { margin-left: auto; min-width: 18px; height: 18px; font-size: 9.5px; }
+.ev.big .mchip { margin-top: 2px; font-size: 12px; }
+.ev.big.frei { border-left-style: dashed; }
+.kal-filter { margin: -8px 0 16px; }
+.kal-filter .chip { display: inline-flex; align-items: center; gap: 6px; }
+.kal-filter .chip .mchip-k { min-width: 20px; height: 20px; font-size: 9.5px; }
+.row-r .mchip { margin-right: 4px; }
+.ev.big .mchip { white-space: normal; align-items: flex-start; }

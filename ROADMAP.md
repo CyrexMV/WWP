@@ -22,6 +22,7 @@ der Stand wird im GitHub-Project-Board verfolgt.
 | [#7](https://github.com/CyrexMV/WWP/issues/7) | ✅ Zeiterfassung pro Auftrag → direkt in die Rechnung | Aufträge |
 | [#20](https://github.com/CyrexMV/WWP/issues/20) | ✅ Steuerrücklage-Rechner und Umsatzprognose | Finanzen |
 | – | ✅ „Heute zu tun“: automatische Aufgaben inkl. Angebote nachfassen (Teil von #15) und Backup-Erinnerung (Teil von #5) | Assistent |
+| – | ✅ Termine an Monteure zuweisen: Auswahl aus dem Team, Kalender-Filter, „Mein Tag“ mit eigenen Terminen | Team |
 | [#25](https://github.com/CyrexMV/WWP/issues/25) | ✅ Cloud mit Supabase: Konten, Team (Chef/Monteur) per Einladungscode, offline-fähiger Abgleich, Rollen per Row Level Security | Technik |
 | – | ✅ Anlagen beim Kunden (mit Typenschild-Foto), digitales Wartungsprotokoll (Checkliste, Messwerte, Unterschrift, PDF, Rechnung), Monteur-Modus mit PIN | Wartung |
 | – | ✅ Vereinfacht: nur noch Kunde → Bestätigung → Rechnung; Angebote und Aufträge ausgeblendet, Rechnungen mit Reitern (Bestätigungen, Mahnwesen) | Design |

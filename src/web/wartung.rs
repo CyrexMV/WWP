@@ -30,7 +30,13 @@ pub fn monteur_aktiv() -> bool {
 
 /// Name des Monteurs auf diesem Gerät (für neue Protokolle).
 pub fn monteur_name() -> String {
-    ls_get(LS_NAME).unwrap_or_default()
+    let lokal = ls_get(LS_NAME).unwrap_or_default();
+    if !lokal.trim().is_empty() {
+        return lokal;
+    }
+    // mit Cloud-Konto: Name aus dem Team
+    let ich = super::cloud::meine_id();
+    super::cloud::team().into_iter().find(|m| m.user_id == ich).map(|m| m.anzeige()).unwrap_or_default()
 }
 
 /// Ansichten, die im Monteur-Modus erlaubt sind.
@@ -465,14 +471,30 @@ impl App {
                 ic("users")
             );
         }
-        // Termine heute
-        let termine = d.termine_am(&heute);
-        h += "<section class=\"grid2\"><div class=\"card\"><div class=\"card-head\"><h2>Termine heute</h2></div>";
+        // Meine Termine heute und in den nächsten Tagen
+        let (ich_id, ich_name) = self.ich();
+        let meine = |t: &&crate::engine::termine::Termin| t.gehoert(&ich_id, &ich_name);
+        let termine: Vec<_> = d.termine_am(&heute).into_iter().filter(meine).collect();
+        h += "<section class=\"grid2\"><div class=\"card\"><div class=\"card-head\"><h2>Meine Termine heute</h2></div>";
         if termine.is_empty() {
-            h += "<p class=\"muted pad\">Heute keine Termine eingetragen.</p>";
+            h += "<p class=\"muted pad\">Heute ist dir kein Termin zugewiesen.</p>";
         } else {
             h += "<div class=\"rows\">";
             for t in termine {
+                h += &super::kalender::termin_row(self, t);
+            }
+            h += "</div>";
+        }
+        let bald: Vec<_> = d
+            .naechste_termine(&date::add_days(&heute, 1), 200)
+            .into_iter()
+            .filter(meine)
+            .filter(|t| t.datum.as_str() <= date::add_days(&heute, 7).as_str())
+            .take(6)
+            .collect();
+        if !bald.is_empty() {
+            h += "<div class=\"card-head\"><h2>Die nächsten Tage</h2></div><div class=\"rows\">";
+            for t in bald {
                 h += &super::kalender::termin_row(self, t);
             }
             h += "</div>";

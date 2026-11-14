@@ -29,6 +29,9 @@ Kunden, Aufträge, Angebote, Rechnungen und Finanzen an einem Ort – **komplett
   Wartungen, Termine und Firmendaten – keine Rechnungen, Buchungen oder Preise; ein Monteur-Konto startet
   automatisch im Monteur-Modus
 - Dateien (Logo, Belege, Typenschild-Fotos) im privaten Speicher; Schema unter `supabase/migrations/`
+- **Termine an Monteure zuweisen**: im Termin-Dialog Monteur aus dem Team wählen (ohne Cloud: Name frei eingeben);
+  Kalender mit Monteur-Plakette und Filter (alle, je Monteur, nicht zugewiesen); Monteure sehen in *Mein Tag*
+  und im Kalender ihre eigenen Termine (umschaltbar auf alle), selbst angelegte Termine sind ihnen zugewiesen
 
 **Anlagen & Wartung (für Heizungsbetriebe)**
 - **Anlagen beim Kunden**: Gas-Brennwert, Öl, Wärmepumpe, Pellet … mit Hersteller, Modell, Seriennummer, Baujahr,

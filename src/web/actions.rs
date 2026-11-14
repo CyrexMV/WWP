@@ -620,6 +620,14 @@ impl App {
                 self.ui.kal_ansicht = "woche".into();
                 self.render();
             }
+            "kal-monteur" => {
+                self.ui.kal_monteur = v.to_string();
+                self.render();
+            }
+            "kal-alle" => {
+                self.ui.kal_alle = v == "1";
+                self.render();
+            }
             "kal-ics" => self.kal_ics_alle(),
             "termin-neu" => {
                 let datum = if date::parse(v).is_some() {

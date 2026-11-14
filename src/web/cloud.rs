@@ -19,6 +19,49 @@ const URL: &str = "https://imayjcxcbhjdftaqvjfj.supabase.co";
 const KEY: &str = "sb_publishable_8PURkGfvG_RaZ6Msl7Y2fg_uw61zoTz";
 const LS_SITZUNG: &str = "zento-sitzung";
 const LS_STAND: &str = "zento-stand";
+const LS_TEAM: &str = "zento-team";
+
+/// Mitglied des Betriebs (für die Zuweisung von Terminen).
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+#[serde(default)]
+pub struct Mitglied {
+    pub user_id: String,
+    pub name: String,
+    pub email: String,
+    pub rolle: String,
+}
+
+impl Mitglied {
+    pub fn anzeige(&self) -> String {
+        if self.name.trim().is_empty() { self.email.clone() } else { self.name.trim().to_string() }
+    }
+}
+
+/// Team des Betriebs (zwischengespeichert, auch offline verfügbar).
+pub fn team() -> Vec<Mitglied> {
+    if !verbunden() {
+        return Vec::new();
+    }
+    ls_get(LS_TEAM).and_then(|j| serde_json::from_str(&j).ok()).unwrap_or_default()
+}
+
+/// Eigene Benutzer-ID (leer ohne Cloud).
+pub fn meine_id() -> String {
+    sitzung().map(|s| s.user_id).unwrap_or_default()
+}
+
+/// Team vom Server holen und zwischenspeichern.
+async fn team_holen() -> Option<Vec<Mitglied>> {
+    let t = token().await.ok()?;
+    let b = sitzung().map(|s| s.betrieb).unwrap_or_default();
+    let a = json("GET", &format!("/rest/v1/mitglieder?select=user_id,name,email,rolle&betrieb_id=eq.{b}&order=rolle,name"), None, Some(&t), &[]).await.ok()?;
+    if a.status >= 400 {
+        return None;
+    }
+    let v: Vec<Mitglied> = serde_json::from_str(&a.text).ok()?;
+    ls_set(LS_TEAM, &serde_json::to_string(&v).unwrap_or_default());
+    Some(v)
+}
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 #[serde(default)]
@@ -248,6 +291,7 @@ pub fn init() {
     if sitzung().is_some_and(|s| !s.betrieb.is_empty()) {
         spawn_local(async {
             let vorher = rolle();
+            let _ = team_holen().await;
             if betrieb_laden().await.is_ok() && rolle() != vorher {
                 if rolle().is_empty() {
                     Z.with(|z| z.borrow_mut().stand = Stand::default());
@@ -508,6 +552,7 @@ impl App {
                         sitzung_setzen(None);
                         Z.with(|z| z.borrow_mut().stand = Stand::default());
                         ls_del(LS_STAND);
+                        ls_del(LS_TEAM);
                         a.render();
                         a.toast("Abgemeldet");
                     },
@@ -630,15 +675,10 @@ impl App {
             return;
         }
         spawn_local(async {
-            let Ok(t) = token().await else { return };
-            let b = sitzung().map(|s| s.betrieb).unwrap_or_default();
-            let Ok(a) = json("GET", &format!("/rest/v1/mitglieder?select=name,email,rolle&betrieb_id=eq.{b}&order=rolle"), None, Some(&t), &[]).await else { return };
-            let v: serde_json::Value = serde_json::from_str(&a.text).unwrap_or_default();
+            let Some(v) = team_holen().await else { return };
             let mut h = String::new();
-            for m in v.as_array().into_iter().flatten() {
-                let name = m.get("name").and_then(|x| x.as_str()).unwrap_or("");
-                let email = m.get("email").and_then(|x| x.as_str()).unwrap_or("");
-                let rolle = m.get("rolle").and_then(|x| x.as_str()).unwrap_or("");
+            for m in &v {
+                let (name, email, rolle) = (m.name.as_str(), m.email.as_str(), m.rolle.as_str());
                 let _ = write!(
                     h,
                     "<div class=\"row static\"><div><b>{}</b><span>{}</span></div><span class=\"badge st-{}\">{}</span></div>",
@@ -672,6 +712,7 @@ async fn nach_beitritt(ersetzen: bool) {
         with_app(|a| a.toast(&e));
         return;
     }
+    let _ = team_holen().await;
     with_app(|a| {
         if ist_monteur() {
             a.go_root(super::View::MeinTag);

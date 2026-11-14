@@ -20,9 +20,24 @@ pub struct Termin {
     pub bis_datum: String,
     pub ort: String,
     pub notiz: String,
+    /// zugewiesener Monteur: Benutzer-ID aus der Cloud (leer ohne Cloud)
+    pub monteur: String,
+    /// Name des Monteurs (Anzeige, auch offline und ohne Cloud)
+    pub monteur_name: String,
 }
 
 impl Termin {
+    /// Ist jemand zugewiesen?
+    pub fn zugewiesen(&self) -> bool {
+        !self.monteur.trim().is_empty() || !self.monteur_name.trim().is_empty()
+    }
+    /// Gehört der Termin zu diesem Monteur (Cloud-ID oder – ohne Cloud – Name)?
+    pub fn gehoert(&self, user_id: &str, name: &str) -> bool {
+        if !user_id.is_empty() && self.monteur == user_id {
+            return true;
+        }
+        self.monteur.is_empty() && !name.trim().is_empty() && self.monteur_name.trim().eq_ignore_ascii_case(name.trim())
+    }
     pub fn ganztag(&self) -> bool {
         self.von.trim().is_empty()
     }
@@ -237,5 +252,18 @@ mod tests {
         assert!(s.contains("LOCATION:Am Markt 3\\, 80333 München"));
         assert!(s.lines().all(|l| l.len() <= 76));
         assert_eq!(d.naechste_termine("2026-11-17", 5).len(), 1);
+    }
+
+    #[test]
+    fn zuweisung() {
+        let mut t = Termin { monteur: "u-1".into(), monteur_name: "Tom".into(), ..Default::default() };
+        assert!(t.zugewiesen());
+        assert!(t.gehoert("u-1", ""));
+        assert!(!t.gehoert("u-2", "Tom"), "mit Cloud-ID zählt nur die ID");
+        t.monteur.clear();
+        assert!(t.gehoert("", "tom"));
+        assert!(!t.gehoert("", ""));
+        t.monteur_name.clear();
+        assert!(!t.zugewiesen());
     }
 }

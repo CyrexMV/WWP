@@ -88,6 +88,10 @@ pub struct Ui {
     pub kal_ansicht: String,
     /// Rechnung, deren Mahnungs-Dialog offen ist
     pub mahn_dok: Option<Id>,
+    /// Kalender-Filter (Chef): "" alle, "_frei" nicht zugewiesen, sonst Monteur
+    pub kal_monteur: String,
+    /// Kalender (Monteur): auch Termine der anderen zeigen
+    pub kal_alle: bool,
     /// Konto: „neu“ (anlegen) oder „login“
     pub konto_modus: String,
     /// aufgeklappte Kategorien im Leistungskatalog ("" = ohne Kategorie)

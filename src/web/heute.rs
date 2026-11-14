@@ -98,7 +98,13 @@ impl App {
                         "calendar",
                         "blau",
                         format!("{} {} · {}", if x.typ == Typ::TerminHeute { "Heute" } else { "Morgen" }, esc(&zeit), esc(&t.map(|t| t.titel.clone()).unwrap_or_default())),
-                        esc(&t.map(|t| if t.ort.is_empty() { kunde(t.kunde_id) } else { t.ort.clone() }).unwrap_or_default()),
+                        esc(&t
+                            .map(|t| {
+                                let wo = if t.ort.is_empty() { kunde(t.kunde_id) } else { t.ort.clone() };
+                                let wer = if t.zugewiesen() { t.monteur_name.trim().to_string() } else { "nicht zugewiesen".into() };
+                                [wo, wer].into_iter().filter(|s| !s.is_empty()).collect::<Vec<_>>().join(" · ")
+                            })
+                            .unwrap_or_default()),
                         btn("termin-open", "", "Öffnen", "ghost sm", x.id, ""),
                     )
                 }

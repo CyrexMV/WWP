@@ -99,7 +99,7 @@ impl App {
         let d = &self.data;
         match key {
             "auftraege" => (d.auftraege.iter().filter(|a| a.status == AuftragStatus::Anfrage).count(), false),
-            "kalender" => (d.termine_am(&heute).len(), false),
+            "kalender" => (d.termine_am(&heute).into_iter().filter(|t| !self.monteur() || self.termin_sichtbar(t)).count(), false),
             "wartungen" => (d.anlagen.iter().filter(|a| a.naechste_wartung().is_some_and(|n| n.as_str() <= heute.as_str())).count(), true),
             "rechnungen" => (d.dokumente.iter().filter(|x| x.ueberfaellig(&heute)).count(), true),
             _ => (0, false),
