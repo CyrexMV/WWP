@@ -22,6 +22,7 @@ der Stand wird im GitHub-Project-Board verfolgt.
 | [#7](https://github.com/CyrexMV/WWP/issues/7) | ✅ Zeiterfassung pro Auftrag → direkt in die Rechnung | Aufträge |
 | [#20](https://github.com/CyrexMV/WWP/issues/20) | ✅ Steuerrücklage-Rechner und Umsatzprognose | Finanzen |
 | – | ✅ „Heute zu tun“: automatische Aufgaben inkl. Angebote nachfassen (Teil von #15) und Backup-Erinnerung (Teil von #5) | Assistent |
+| [#25](https://github.com/CyrexMV/WWP/issues/25) | ✅ Cloud mit Supabase: Konten, Team (Chef/Monteur) per Einladungscode, offline-fähiger Abgleich, Rollen per Row Level Security | Technik |
 | – | ✅ Anlagen beim Kunden (mit Typenschild-Foto), digitales Wartungsprotokoll (Checkliste, Messwerte, Unterschrift, PDF, Rechnung), Monteur-Modus mit PIN | Wartung |
 | – | ✅ Vereinfacht: nur noch Kunde → Bestätigung → Rechnung; Angebote und Aufträge ausgeblendet, Rechnungen mit Reitern (Bestätigungen, Mahnwesen) | Design |
 | – | ✅ Leistungskatalog: Vorlage Heizungsbau mit 50 Leistungen und Artikeln (Richtpreise) | Rechnungen |
@@ -57,7 +58,6 @@ der Stand wird im GitHub-Project-Board verfolgt.
 | [#22](https://github.com/CyrexMV/WWP/issues/22) | Fahrtenbuch und Kilometerpauschale | Finanzen |
 | [#23](https://github.com/CyrexMV/WWP/issues/23) | Anlagenverzeichnis und Abschreibungen (AfA) | Finanzen |
 | [#24](https://github.com/CyrexMV/WWP/issues/24) | EU-Kunden: Reverse-Charge und Rechnungen auf Englisch | Rechnungen |
-| [#25](https://github.com/CyrexMV/WWP/issues/25) | Synchronisation zwischen Geräten (verschlüsselt) | Technik |
 | [#27](https://github.com/CyrexMV/WWP/issues/27) | Automatische Oberflächentests im Build | Technik |
 
 ## Vorgeschlagene Reihenfolge

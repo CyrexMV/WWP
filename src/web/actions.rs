@@ -145,7 +145,7 @@ impl App {
     // -----------------------------------------------------------------------
 
     pub fn action(&mut self, act: &str, id: Option<Id>, v: &str) {
-        if self.settings_action(act, v) || self.nav_action(act, v) || self.zeit_action(act, id, v) || self.suche_action(act, id, v) || self.wartung_action(act, id, v) {
+        if self.settings_action(act, v) || self.nav_action(act, v) || self.zeit_action(act, id, v) || self.suche_action(act, id, v) || self.wartung_action(act, id, v) || self.cloud_action(act, v) {
             return;
         }
         let heute = today();

@@ -13,6 +13,7 @@ pub mod money;
 pub mod pdf;
 pub mod pdfa;
 pub mod report;
+pub mod sync;
 pub mod termine;
 pub mod ttf;
 pub mod vorlagen;

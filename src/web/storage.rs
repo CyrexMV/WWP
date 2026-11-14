@@ -89,6 +89,14 @@ fn idb_clear(db: &IdbDatabase, store: &str) {
     }
 }
 
+/// Heruntergeladene Datei mit fester ID ablegen (Cloud-Abgleich).
+pub fn datei_ablegen(id: Id, bytes: &[u8]) -> bool {
+    match with_app(|a| a.db.clone()).flatten() {
+        Some(db) => idb_put(&db, STORE_FILES, &id.to_string(), &Uint8Array::from(bytes).into()),
+        None => false,
+    }
+}
+
 /// Datei aus dem Speicher lesen.
 pub async fn load_file(id: Id) -> Option<Vec<u8>> {
     let db = with_app(|a| a.db.clone()).flatten()?;
@@ -194,6 +202,9 @@ impl App {
             }
         }
         let logo = data.firma.logo.and_then(|l| files.iter().find(|f| f.0 == l).map(|f| f.1.clone()));
+        let mut data = data;
+        data.geraet = self.data.geraet;
+        data.next_id = data.next_id.max(self.data.next_id);
         self.data = data;
         self.set_logo_bytes(logo);
         self.save_now();

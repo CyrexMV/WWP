@@ -131,8 +131,10 @@ impl App {
             }
             let _ = write!(
                 h,
-                "</div><div class=\"nav-space\"></div><div class=\"nav-foot\"><button class=\"nav-item\" data-act=\"monteur-aus\" title=\"Monteur-Modus beenden\">{}<span>Beenden</span></button></div><p class=\"save-state\" id=\"save-state\">Gespeichert</p>",
-                ic("logout")
+                "</div><div class=\"nav-space\"></div><div class=\"nav-foot\"><button class=\"nav-item\" data-act=\"monteur-aus\" title=\"{}\">{}<span>{}</span></button></div><p class=\"save-state\" id=\"save-state\">Gespeichert</p>",
+                if super::cloud::ist_monteur() { "Konto" } else { "Monteur-Modus beenden" },
+                ic(if super::cloud::ist_monteur() { "cloud" } else { "logout" }),
+                if super::cloud::ist_monteur() { "Konto" } else { "Beenden" }
             );
             return h;
         }

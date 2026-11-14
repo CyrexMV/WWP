@@ -31,6 +31,7 @@ features = [
   "IdbRequest", "IdbObjectStore", "IdbTransaction", "IdbTransactionMode", "DomStringList",
   "VisibilityState", "DomTokenList", "CssStyleDeclaration", "Location",
   "HtmlCanvasElement", "CanvasRenderingContext2d", "PointerEvent", "DomRect",
+  "Request", "RequestInit", "Headers", "Response",
 ]
 
 [profile.release]

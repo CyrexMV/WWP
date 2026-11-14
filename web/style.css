@@ -1103,3 +1103,9 @@ button.foto.leer span { font-size: 13px; }
   .pp { grid-template-columns: 1fr; }
   .pp-seg { justify-content: flex-start; }
 }
+
+/* --- Konto & Team ------------------------------------------------------------------ */
+.konto-fehler { margin: 0 22px; color: var(--bad); font-weight: 600; font-size: 14px; min-height: 0; }
+.konto-fehler:empty { display: none; }
+.konto-fehler:not(:empty) { margin-bottom: 14px; }
+.code-gross { font: 800 38px/1.1 ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: .18em; text-align: center; padding: 22px 12px; border-radius: 18px; background: var(--accent-soft); color: var(--accent); user-select: all; }

@@ -1115,6 +1115,8 @@ pub struct Data {
     pub anlagen: Vec<super::anlagen::Anlage>,
     /// Wartungsprotokolle
     pub wartungen: Vec<super::anlagen::Wartung>,
+    /// Gerätenummer aus der Cloud (0 = nur lokal)
+    pub geraet: u64,
     /// Datum des letzten gespeicherten Backups
     pub letztes_backup: String,
     /// weggeklickte Hinweise (z. B. „So funktioniert der Ablauf“)
@@ -1144,6 +1146,10 @@ impl Data {
             .chain(d.katalog.iter().map(|x| x.id))
             .chain(d.dateien.iter().map(|x| x.id))
             .chain(d.termine.iter().map(|x| x.id))
+            .chain(d.anlagen.iter().map(|x| x.id))
+            .chain(d.wartungen.iter().map(|x| x.id))
+            .chain(d.auftraege.iter().flat_map(|a| a.zeiten.iter().map(|z| z.id)))
+            .filter(|i| d.geraet == 0 || (*i >> 40) == d.geraet)
             .max()
             .unwrap_or(0);
         d.next_id = d.next_id.max(max + 1);
@@ -1179,7 +1185,13 @@ impl Data {
         serde_json::to_string(self).unwrap_or_default()
     }
 
+    /// Neue ID. Mit Cloud-Abgleich hat jedes Gerät einen eigenen Bereich
+    /// (Gerätenummer × 2⁴⁰), damit mehrere Geräte nie dieselbe ID vergeben.
     pub fn new_id(&mut self) -> Id {
+        let basis: Id = self.geraet << 40;
+        if self.geraet > 0 && self.next_id < basis {
+            self.next_id = basis + 1;
+        }
         let id = self.next_id.max(1);
         self.next_id = id + 1;
         id

@@ -173,6 +173,7 @@ impl App {
         };
         set_html("main", &html);
         super::wartung::fotos_laden();
+        self.team_laden();
     }
 
     // -----------------------------------------------------------------------
@@ -435,7 +436,12 @@ impl App {
                 h,
                 "<div class=\"card\"><div class=\"card-head\"><h2>Anschrift</h2>{}</div><p class=\"pad addr\">{}</p>{}</div>",
                 btn("kunde-route", "map", "Navigation", "ghost sm", Some(k.id), ""),
-                esc(&k.anschrift()).replace('\n', "<br>"),
+                esc(&k.anschrift()).replace('\n', "<br>")
+                    + &[(&k.telefon, "Tel."), (&k.email, "E-Mail")]
+                        .iter()
+                        .filter(|(v, _)| !v.trim().is_empty())
+                        .map(|(v, l)| format!("<br><span class=\"muted\">{l}</span> {}", esc(v.trim())))
+                        .collect::<String>(),
                 if k.notizen.trim().is_empty() { String::new() } else { format!("<p class=\"pad muted\">{}</p>", esc(k.notizen.trim()).replace('\n', "<br>")) }
             );
             h += &self.anlagen_card(k.id);

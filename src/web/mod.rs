@@ -7,6 +7,7 @@
 
 mod ablauf;
 mod actions;
+mod cloud;
 mod heute;
 mod dnd;
 mod kalender;
@@ -87,6 +88,8 @@ pub struct Ui {
     pub kal_ansicht: String,
     /// Rechnung, deren Mahnungs-Dialog offen ist
     pub mahn_dok: Option<Id>,
+    /// Konto: „neu“ (anlegen) oder „login“
+    pub konto_modus: String,
     /// aufgeklappte Kategorien im Leistungskatalog ("" = ohne Kategorie)
     pub kat_offen: HashSet<String>,
 }
@@ -199,6 +202,7 @@ impl App {
             with_app(|a| {
                 if a.save_gen == g {
                     a.save_now();
+                    cloud::planen();
                 }
             });
         });
@@ -530,6 +534,7 @@ pub fn start() {
     dnd::bind();
     zeiten::bind();
     storage::init_storage();
+    cloud::init();
     storage::register_service_worker();
     with_app(|a| a.render());
 }

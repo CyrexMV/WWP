@@ -9,6 +9,7 @@ use std::fmt::Write as _;
 
 /// (Schlüssel, Symbol, Titel, Beschreibung)
 pub const SECTIONS: &[(&str, &str, &str, &str)] = &[
+    ("konto", "cloud", "Konto & Team", "Cloud, Geräte, Monteure"),
     ("firma", "building", "Firma & Kontakt", "Name, Anschrift, Erreichbarkeit"),
     ("bank", "landmark", "Bank & Steuern", "IBAN, Steuernummer, GiroCode"),
     ("brief", "palette", "Briefbogen", "Logo, Farbe, Vorschau"),
@@ -228,6 +229,7 @@ impl App {
             "texte" => self.sec_texte(),
             "darstellung" => self.sec_darstellung(),
             "daten" => self.sec_daten(),
+            "konto" => self.sec_konto(),
             _ => self.sec_firma(),
         };
         h += "</div></div>";

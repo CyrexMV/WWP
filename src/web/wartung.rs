@@ -25,7 +25,7 @@ fn ls_set(k: &str, v: &str) {
 
 /// Monteur-Modus ist auf diesem Gerät eingeschaltet?
 pub fn monteur_aktiv() -> bool {
-    ls_get(LS_MONTEUR).as_deref() == Some("1")
+    super::cloud::ist_monteur() || ls_get(LS_MONTEUR).as_deref() == Some("1")
 }
 
 /// Name des Monteurs auf diesem Gerät (für neue Protokolle).
@@ -692,6 +692,10 @@ impl App {
             }
             "monteur-an" => self.monteur_setzen(true),
             "monteur-aus" => {
+                if super::cloud::ist_monteur() {
+                    // Monteur-Konto: kein Verlassen, nur Konto/Abmelden
+                    return self.cloud_action("konto-info", "");
+                }
                 if self.data.firma.monteur_pin.trim().is_empty() {
                     self.monteur_setzen(false);
                 } else {

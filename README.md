@@ -18,6 +18,18 @@ Kunden, Aufträge, Angebote, Rechnungen und Finanzen an einem Ort – **komplett
 - **Globale Suche & Schnellbefehle** (Strg+K, „/“ oder Lupe): Kunden, Aufträge, Dokumente (auch nach Betrag),
   Buchungen, Termine, Leistungen und Befehle wie „Neue Rechnung“ in einem Feld, mit Pfeiltasten bedienbar
 
+**Cloud & Team (Supabase)**
+- **Konto** mit E-Mail und Passwort (Einstellungen → *Konto & Team*); Daten in der Cloud, Server in Frankfurt
+- **Betrieb mit Team**: der Anlegende ist Chef; Monteure und weitere Chef-Geräte treten mit einem
+  **Einladungscode** bei (8 Zeichen, 7 Tage gültig, einmal verwendbar)
+- **Offline-fähiger Abgleich**: die App arbeitet lokal weiter und gleicht im Hintergrund ab (nach Änderungen,
+  jede Minute, sobald wieder Internet da ist); gleichzeitige Änderungen: die zuletzt hochgeladene gewinnt,
+  Nummernkreise werden zusammengeführt; jedes Gerät hat einen eigenen ID-Bereich
+- **Rollen werden vom Server durchgesetzt** (Row Level Security): Monteure erhalten nur Kunden, Anlagen,
+  Wartungen, Termine und Firmendaten – keine Rechnungen, Buchungen oder Preise; ein Monteur-Konto startet
+  automatisch im Monteur-Modus
+- Dateien (Logo, Belege, Typenschild-Fotos) im privaten Speicher; Schema unter `supabase/migrations/`
+
 **Anlagen & Wartung (für Heizungsbetriebe)**
 - **Anlagen beim Kunden**: Gas-Brennwert, Öl, Wärmepumpe, Pellet … mit Hersteller, Modell, Seriennummer, Baujahr,
   Leistung, Standort, Notizen und **Foto vom Typenschild**; Wartungsintervall → nächste Fälligkeit automatisch
@@ -172,6 +184,7 @@ src/web/      Oberfläche (wasm-bindgen / web-sys)
   settings.rs   Einstellungen mit Bereichen und Live-Vorschau
   kalender.rs   Wochen-/Monatsansicht, Termin-Dialog
   dnd.rs        Listen per Ziehen umsortieren (Positionen, Seitenleiste)
+  cloud.rs      Supabase: Konto, Betrieb/Team, Einladungen, Abgleich, Dateien
   wartung.rs    Anlagen, Wartungsprotokoll, Monteur-Modus
   suche.rs      globale Suche und Schnellbefehle
   heute.rs      „Heute zu tun“ auf der Übersicht
